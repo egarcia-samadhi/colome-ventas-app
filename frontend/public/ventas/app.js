@@ -249,7 +249,7 @@
     const vals = act.concat(ly).filter(v => v !== null);
     if (!vals.length) return '<div class="empty">Sin datos para la selección.</div>';
     const f = fmtM();
-    const W = 760, H = 300, ml = 70, mr = 20, mt = 26, mb = 40, iw = W - ml - mr, ih = H - mt - mb;
+    const W = 1160, H = 460, ml = 70, mr = 20, mt = 26, mb = 40, iw = W - ml - mr, ih = H - mt - mb;
     const step = niceStep(Math.max.apply(null, vals) * 1.12 / 4), top = step * 4;
     const x = i => ml + (iw * i) / 11, y = v => mt + ih - (Math.max(v, 0) / top) * ih;
     let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolución por período"><defs><linearGradient id="ge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7D4E5B" stop-opacity=".55"/><stop offset="1" stop-color="#7D4E5B" stop-opacity=".03"/></linearGradient></defs>`;
@@ -286,7 +286,7 @@
     const key = st.metrica, f = fmtM();
     const L = list.filter(r => r[key] > 0).sort((a, b) => b[key] - a[key]).slice(0, 10);
     if (!L.length) return '<div class="empty">Sin datos para la selección.</div>';
-    const W = 760, H = 330, ml = 70, mr = 14, mt = 28, mb = 76, iw = W - ml - mr, ih = H - mt - mb;
+    const W = 1160, H = 500, ml = 70, mr = 14, mt = 28, mb = 76, iw = W - ml - mr, ih = H - mt - mb;
     const step = niceStep(L[0][key] * 1.12 / 4), top = step * 4, band = iw / L.length, bw = Math.min(band * 0.6, 58);
     let s = `<svg viewBox="0 0 ${W} ${H}" role="img"><defs><linearGradient id="gv" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9F6375"/><stop offset="1" stop-color="#5F3D4A"/></linearGradient></defs>`;
     for (let g = 0; g <= 4; g++) {
