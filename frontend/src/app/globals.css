@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Misma paleta que fuentes-mock-app/estilo-colome-app.css (identidad Colomé) */
+:root {
+  --bg: #f7f5f0;
+  --card: #ffffff;
+  --text: #353024;
+  --ink: #1c1811;
+  --muted: #847c68;
+  --line: #ece6d8;
+  --brand: #7D4E5B;
+  --brand-2: #9F6375;
+  --gold: #dcbe84;
+  --gold-d: #b8975a;
+  --sidebar-bg: #2b2d31;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+}

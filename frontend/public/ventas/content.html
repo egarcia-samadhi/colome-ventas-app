@@ -1,0 +1,78 @@
+<!-- ================= Sales Performance (SNAP) ================= -->
+      <div id="view-snap" class="view">
+        <div class="seg" role="radiogroup" aria-label="Sales Performance" style="margin-bottom:14px">
+          <label><input type="radio" name="snapTab" value="consolidado" checked> Consolidado</label>
+          <label><input type="radio" name="snapTab" value="fdelmotte"> FdelMotte</label>
+        </div>
+        <div id="snapConsolidado">
+          <div class="note">
+            <span>⚠️</span>
+            <div>
+              <b>Budget con placeholder sin confirmar.</b> En la planilla original del cliente, casi todas las celdas de <b>Budget</b> (columna completa en "Sales by Market") vienen con el valor literal <b>23</b> repetido, que no es un presupuesto real — parece un placeholder de la maqueta SNAP. Se muestra tal cual llegó (marcado con <span style="color:#d97706">●</span>) hasta que el cliente confirme el origen del dato real. En "Sales by Line of Business" el Budget sí trae valores calculados variables.
+            </div>
+          </div>
+          <div class="stat-row" id="statRow"></div>
+          <section class="panel">
+            <h2>Sales by Line of Business</h2>
+            <div class="panel-sub">Valores de venta en USD (000s) y equivalente 9 litros. Actual vs. Budget vs. Last Year.</div>
+            <div id="sblTable"></div>
+          </section>
+          <section class="panel">
+            <h2>Sales by Market</h2>
+            <div class="panel-sub">Doméstico vs. Exportación por país/región — Agosto 2026, en USD (000s) y 9L equivalente.</div>
+            <div id="sbmTable"></div>
+          </section>
+        </div>
+        <div id="snapFdelMotte" hidden>
+          <div class="bar-top">
+            <span class="pill">Ejercicio Fiscal en curso — datos en vivo (ig_ventas)</span>
+          </div>
+          <div id="fmBody"><div class="empty">Cargando datos en vivo…</div></div>
+        </div>
+      </div>
+
+      <!-- ================= Panel de Ventas ================= -->
+      <div id="view-panel" class="view" hidden>
+        <div class="bar-top">
+          <span class="pill">Ejercicio Fiscal - 2026-2027</span>
+          <div class="seg" role="radiogroup" aria-label="Métrica">
+            <label><input type="radio" name="pvMetrica" value="usd" checked> Ingresos</label>
+            <label><input type="radio" name="pvMetrica" value="cajas"> Cajas</label>
+          </div>
+          <button class="btn" disabled title="Disponible al conectar el ERP en vivo (ig_ventas)">⬇ Exportar Excel (detalle de comprobantes)</button>
+        </div>
+        <div id="pvBody"></div>
+      </div>
+
+      <!-- ================= Ventas por Región ================= -->
+      <div id="view-region" class="view" hidden>
+        <div class="bar-top">
+          <span class="pill">Ejercicio Fiscal - 2026-2027</span>
+          <span class="hint" style="margin:0">Región = Zona Comercial de Redline. Los filtros del panel lateral aplican a la tabla y al mapa.</span>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>Región → País → Cliente</h3>
+            <div style="display:flex;gap:8px">
+              <button class="btn" id="rgToggle">▼ Expandir todo</button>
+            </div>
+          </div>
+          <div class="scroll-x" style="border:1px solid var(--line)"><div id="rgTable"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3 id="mapTitle">Mapa Mundial — Ventas por País</h3>
+            <div class="seg" role="radiogroup" aria-label="Nivel del mapa">
+              <label><input type="radio" name="mapModo" value="pais" checked> Por país</label>
+              <label><input type="radio" name="mapModo" value="prov"> Argentina por provincia</label>
+            </div>
+          </div>
+          <div id="mapBox">Cargando mapa…</div>
+          <div class="hint" id="mapNote"></div>
+        </div>
+      </div>
+
+      <footer class="meta">
+        Fuentes: <code>SNAP I Aug 2026 - NM - vsp.xls</code> (Sales Performance) y <code>Operaciones_de_Ventas.xlsx › Base de Ventas Colome</code> (Panel de Ventas y Ventas por Región: facturas y notas de crédito jul–ago 2026, USD = <code>Valor Venta Mon Alt</code>). Concilia con el SNAP: US$ 867.829 y 16.111,3 cajas 9L YTD; GM 59,6 %.<br>
+        Próximo paso: conectar todo al endpoint en vivo <code>ig_ventas</code> (ver <code>ARQUITECTURA.md</code>). Mock de referencia — dato estático, sin actualización automática.
+      </footer>
