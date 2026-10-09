@@ -3,11 +3,12 @@
 auditoria_linea_a_linea.md): pantalla propia, admin-only, 2 inputs de fecha
 (rango libre) + botón "Descargar Excel", sin grilla en pantalla.
 
-Fuente: ig_ventas.filas_auditoria(), la fuente más cruda del proyecto --
-el 100% de las filas del rango, SIN el filtro TIPOS_VALIDOS (que sí aplican
-Cruce AFIP/Ventas por Jurisdicción) ni el filtro GRUPO_VALIDO (que sí aplica
-Panel de Ventas), para poder respaldar cualquier número de cualquier
-pantalla, incluidas esas dos clasificaciones en sí mismas.
+Fuente: ig_ventas.filas_auditoria() -- filtra por TIPOS_VALIDOS (solo
+comprobantes validados con AFIP: Facturas Venta, Nota de Crédito/Débito
+Venta; pedido explícito de Ariel/Ezequiel 2026-10-09, notas de pedido y
+remitos NO son venta y no deben aparecer), pero NO filtra por GRUPO_VALIDO
+(el que sí aplica Panel de Ventas) -- audita el 100% de lo facturado real
+(VINOS+INSUMOS+SERVICIOS), para poder respaldar también Otros Análisis.
 
 Columnas: todas las de CAMPOS_USADOS (ig_ventas.py) + periodo_real (mes
 calendario real, igual que usa cada pantalla) + jurisdiccion_concepto
