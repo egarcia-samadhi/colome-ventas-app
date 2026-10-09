@@ -29,6 +29,7 @@ const NAV = [
   { href: "/budget/", label: "Budget", icon: "💰" },
   { href: "/controles/", label: "Controles", icon: "🛡️" },
   { href: "/datos-maestros/", label: "Datos Maestros", icon: "🗂️" },
+  { href: "/auditoria/", label: "Auditoría", icon: "🔍" },
 ];
 
 export function Sidebar({ title, children }: { title: string; children?: React.ReactNode }) {

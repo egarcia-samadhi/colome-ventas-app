@@ -23,7 +23,7 @@ BASE_DIR = os.path.dirname(__file__)
 # y public/ventas/* (datos+JS portados del mock) quedan en out/ventas/*.
 NEXT_DIR = os.path.join(BASE_DIR, "static_next")
 
-NEXT_ROUTES = {"otros-analisis", "ctrl-afip", "budget", "controles", "datos-maestros"}
+NEXT_ROUTES = {"otros-analisis", "ctrl-afip", "budget", "controles", "datos-maestros", "auditoria"}
 
 app = FastAPI()
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -71,6 +71,7 @@ from datos_maestros import router as datos_maestros_router
 from controles import router as controles_router
 from panel_ventas import router as panel_ventas_router
 from otros_analisis import router as otros_analisis_router
+from auditoria import router as auditoria_router
 
 init_db()
 app.include_router(afip_router)
@@ -79,6 +80,7 @@ app.include_router(datos_maestros_router)
 app.include_router(controles_router)
 app.include_router(panel_ventas_router)
 app.include_router(otros_analisis_router)
+app.include_router(auditoria_router)
 
 
 @app.get("/{path:path}")

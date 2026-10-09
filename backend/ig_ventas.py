@@ -353,6 +353,29 @@ def facts_panel_ventas(desde: date, hasta_incl: date) -> dict:
     return {"dims": dims, "facts": facts}
 
 
+def filas_auditoria(desde: date, hasta_incl: date):
+    """Generador línea a línea para la hoja Auditoría (regla de oro #33) --
+    el 100% de las filas de ig_ventas en el rango, SIN ningún filtro de
+    alcance de los que sí aplican las pantallas operativas (ni TIPOS_VALIDOS
+    de neto_y_cae_por_comprobante/neto_por_jurisdiccion, ni GRUPO_VALIDO de
+    facts_panel_ventas) -- el objetivo es poder respaldar CUALQUIER número de
+    CUALQUIER pantalla, incluida la clasificación de tipo de comprobante y de
+    grupo en sí mismas. Mismo dedupe GLOBAL por (id, det_id) y mismo cálculo
+    de `periodo` real (mes calendario de `fecha`, no el campo `periodo` de
+    cierre contable del ERP) que el resto del módulo -- ver docstrings de
+    neto_por_jurisdiccion y _periodo_de_fila."""
+    vistos_global = set()
+    dia = desde
+    while dia <= hasta_incl:
+        for it in _fetch_dia(dia):
+            key = (it.get("id"), it.get("det_id"))
+            if key in vistos_global:
+                continue
+            vistos_global.add(key)
+            yield {**it, "periodo_real": _periodo_de_fila(it, dia)}
+        dia += timedelta(days=1)
+
+
 def desglose_por_grupo(desde: date, hasta_incl: date) -> list[dict]:
     """Otros Análisis -> desglose por `d_grupo` (VINOS/INSUMOS/SERVICIOS),
     por período y moneda -- a diferencia de facts_panel_ventas() acá NO se
