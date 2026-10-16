@@ -34,6 +34,16 @@ async def cache_static_assets(request: Request, call_next):
     response = await call_next(request)
     if request.url.path.startswith("/_next/static/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    else:
+        # FileResponse no manda Cache-Control propio -- sin esto, el navegador
+        # cachea /ventas/*.js (y el resto del HTML/JSON estático) de forma
+        # heurística en base a Last-Modified, y sigue sirviendo una versión
+        # vieja días después de un deploy aunque el archivo en el servidor ya
+        # haya cambiado (bug real encontrado 2026-10-16: app.js servía la
+        # versión del 9/10 una semana después del último deploy). no-cache
+        # fuerza revalidación con ETag en cada request (sigue siendo 304 si
+        # no cambió, no es "bajar todo de nuevo siempre").
+        response.headers["Cache-Control"] = "no-cache"
     return response
 
 

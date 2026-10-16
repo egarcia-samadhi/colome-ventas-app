@@ -384,13 +384,15 @@ def filas_auditoria(desde: date, hasta_incl: date):
         dia += timedelta(days=1)
 
 
-def desglose_por_grupo(desde: date, hasta_incl: date) -> list[dict]:
-    """Otros Análisis -> desglose por `d_grupo` (VINOS/INSUMOS/SERVICIOS),
-    por período y moneda -- a diferencia de facts_panel_ventas() acá NO se
-    filtra por GRUPO_VALIDO, es el 100% de las líneas que concilian con
-    AFIP (mismo universo que neto_y_cae_por_comprobante). Pedido explícito
-    de Ezequiel 2026-10-08: mostrar la diferencia entre "Ventas" (solo vino,
-    lo que ve Panel de Ventas) y el total facturado real."""
+DESGLOSE_AGG_CACHE = CACHE_DIR.parent / "otros_analisis_agg_cerrado.json"
+
+
+def _agregado_crudo_desglose(desde: date, hasta_incl: date) -> dict[tuple[str, str], dict[str, float]]:
+    """Agregado {(periodo, grupo): {ars, usd}} -- separado de
+    desglose_por_grupo() para poder cachear en disco el agregado de los
+    meses ya cerrados, mismo patrón que _agregado_crudo_panel()."""
+    if hasta_incl < desde:
+        return {}
     acc: dict[tuple[str, str], dict[str, float]] = {}
     vistos_global = set()
     dia = desde
@@ -415,6 +417,54 @@ def desglose_por_grupo(desde: date, hasta_incl: date) -> list[dict]:
             d = acc.setdefault(k, {"ars": 0.0, "usd": 0.0})
             d[bucket] += neto
         dia += timedelta(days=1)
+    return acc
+
+
+def desglose_por_grupo(desde: date, hasta_incl: date) -> list[dict]:
+    """Otros Análisis -> desglose por `d_grupo` (VINOS/INSUMOS/SERVICIOS),
+    por período y moneda -- a diferencia de facts_panel_ventas() acá NO se
+    filtra por GRUPO_VALIDO, es el 100% de las líneas que concilian con
+    AFIP (mismo universo que neto_y_cae_por_comprobante). Pedido explícito
+    de Ezequiel 2026-10-08: mostrar la diferencia entre "Ventas" (solo vino,
+    lo que ve Panel de Ventas) y el total facturado real.
+
+    Performance (2026-10-16): mismo bug que facts_panel_ventas() tenía antes
+    de optimizarse -- recalculaba el agregado desde cero releyendo ~410 días
+    cacheados en disco en CADA request ("se pone pesado" al entrar a Otros
+    Análisis). Mismo fix: los meses ya cerrados se agregan una sola vez y se
+    cachean en DESGLOSE_AGG_CACHE; solo el mes en curso se recalcula en vivo."""
+    hoy = date.today()
+    inicio_mes_actual = date(hoy.year, hoy.month, 1)
+    cerrado_hasta = min(hasta_incl, inicio_mes_actual - timedelta(days=1))
+
+    acc_cerrado: dict[tuple[str, str], dict[str, float]] = {}
+    if cerrado_hasta >= desde:
+        cache_valido = False
+        if DESGLOSE_AGG_CACHE.exists():
+            try:
+                cached = json.loads(DESGLOSE_AGG_CACHE.read_text(encoding="utf-8"))
+                if cached.get("desde") == desde.isoformat() and cached.get("hasta") == cerrado_hasta.isoformat():
+                    acc_cerrado = {tuple(k.split("\x1f")): v for k, v in cached["agg"].items()}
+                    cache_valido = True
+            except Exception:
+                pass
+        if not cache_valido:
+            acc_cerrado = _agregado_crudo_desglose(desde, cerrado_hasta)
+            DESGLOSE_AGG_CACHE.parent.mkdir(parents=True, exist_ok=True)
+            DESGLOSE_AGG_CACHE.write_text(json.dumps({
+                "desde": desde.isoformat(), "hasta": cerrado_hasta.isoformat(),
+                "agg": {"\x1f".join(k): v for k, v in acc_cerrado.items()},
+            }), encoding="utf-8")
+
+    desde_vivo = max(desde, inicio_mes_actual)
+    acc_vivo = _agregado_crudo_desglose(desde_vivo, hasta_incl) if desde_vivo <= hasta_incl else {}
+
+    acc: dict[tuple[str, str], dict[str, float]] = {k: dict(v) for k, v in acc_cerrado.items()}
+    for k, v in acc_vivo.items():
+        d = acc.setdefault(k, {"ars": 0.0, "usd": 0.0})
+        d["ars"] += v["ars"]
+        d["usd"] += v["usd"]
+
     out = [
         {"periodo": p, "grupo": g, **{kk: round(vv, 2) for kk, vv in v.items()}}
         for (p, g), v in acc.items()
