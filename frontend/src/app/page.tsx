@@ -61,7 +61,13 @@ export default function VentasPage() {
     document.head.appendChild(cssLink);
 
     const hash = (window.location.hash || "").replace("#", "");
-    const vaAPanelORegion = hash === "panel" || hash === "region";
+    // Default (sin hash) ahora es Panel de Ventas, no Sales Performance --
+    // pedido explícito de Ezequiel 2026-10-16: "la primera pantalla al
+    // ingresar tiene que ser panel de ventas". Panel/Región necesitan el
+    // dato en vivo de /api/ventas/panel sí o sí, por eso van por el mismo
+    // camino de carga completa (sin fast path, que solo tiene sentido para
+    // Sales Performance).
+    const vaAPanelORegion = hash === "" || hash === "panel" || hash === "region";
 
     const inyectarSnap = (dataJson: string, snapJs: string) => {
       const dataScript = document.createElement("script");
@@ -140,7 +146,7 @@ export default function VentasPage() {
   }, []);
 
   return (
-    <AppShell current="/" title="Sales Performance" sidebar={<div ref={sidebarRef} />}>
+    <AppShell current="/" title="Panel de Ventas" sidebar={<div ref={sidebarRef} />}>
       {!loaded && <div className="py-20 text-center text-[#847c68] text-sm">Cargando…</div>}
       <div ref={contentRef} />
       {/* usado por app.js (portado del mock) para los tooltips de los gráficos SVG */}

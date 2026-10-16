@@ -544,7 +544,7 @@
     if (st.vista === 'region') { renderRegion(); drawMap(); }
   }
   function show(v) {
-    if (!VIEWS[v]) v = 'snap';
+    if (!VIEWS[v]) v = 'panel';
     st.vista = v;
     Object.keys(VIEWS).forEach(k => { $(VIEWS[k]).hidden = k !== v; });
     $('sbSnap').hidden = v !== 'snap';

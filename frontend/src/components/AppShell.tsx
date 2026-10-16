@@ -70,7 +70,7 @@ export function Header({ current }: { current: string }) {
   }, []);
 
   useEffect(() => {
-    const update = () => setHash(window.location.hash || "#snap");
+    const update = () => setHash(window.location.hash || "#panel");
     update();
     window.addEventListener("hashchange", update);
     return () => window.removeEventListener("hashchange", update);
