@@ -65,7 +65,9 @@ CAMPOS_USADOS = (
     # este cambio no tiene estas claves (vuelven None) -- si se nota algún
     # Cód./Vendedor vacío en un mes cerrado viejo, purgar CACHE_DIR en el VPS
     # para forzar la rebajada con el campo nuevo (ver docstring del módulo).
-    "c_articulo", "n_vendedor",
+    # "d_articulo" se agregó recién (faltaba en la lista original, por eso
+    # ventas_por_sku/ventas_por_vendedor mostraban siempre "Sin artículo").
+    "c_articulo", "d_articulo", "n_vendedor",
 )
 
 
