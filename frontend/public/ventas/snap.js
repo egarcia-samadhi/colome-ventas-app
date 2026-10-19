@@ -1,4 +1,4 @@
-const RAW = JSON.parse(document.getElementById('colome-data').textContent);
+let RAW = JSON.parse(document.getElementById('colome-data').textContent);
 
 function fmtUsd(v) {
   if (v === null || v === undefined || v === '') return '—';
@@ -109,10 +109,10 @@ function render(period) {
 // explícito de Ezequiel 2026-10-19, "solo exponer sales by line, en dos
 // pestañas monthly/ytd"). El botón YTD muestra el rango real del backend
 // (RAW.desde_ytd/hasta_ytd, ver snap.py); Monthly muestra RAW.periodo.
-(function etiquetarPeriodos() {
+function etiquetarPeriodos() {
   const btnYtd = document.querySelector('.period-toggle button[data-period="ytd"]');
   if (btnYtd) btnYtd.textContent = `YTD (${RAW.desde_ytd} a ${RAW.hasta_ytd})`;
-})();
+}
 
 document.querySelectorAll('.period-toggle button').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -121,4 +121,39 @@ document.querySelectorAll('.period-toggle button').forEach(btn => {
     render(btn.dataset.period);
   });
 });
+
+// ---------- Selector de mes en el sidebar (pedido explícito de Ezequiel
+// 2026-10-19: "en el sidebar tiene que decir qué mes querés ver... en el
+// caso de ytd, hasta qué mes"). Un solo <select> controla ambas pestañas:
+// Monthly muestra ESE mes, YTD va desde el inicio del ejercicio fiscal
+// HASTA ese mismo mes (así lo arma snap.py) -- elegir un mes distinto
+// dispara un refetch de /api/ventas/snap?mes=YYYY-MM. ----------
+const NOMBRES_MES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+function labelMes(m) {
+  const [a, mm] = m.split('-').map(Number);
+  return `${NOMBRES_MES[mm - 1]} ${a}`;
+}
+
+function poblarSelectorMes() {
+  const sel = document.getElementById('snapMesSel');
+  if (!sel) return;
+  sel.innerHTML = (RAW.meses_disponibles || [])
+    .map(m => `<option value="${m}" ${m === RAW.periodo ? 'selected' : ''}>${labelMes(m)}</option>`)
+    .join('');
+}
+poblarSelectorMes();
+etiquetarPeriodos();
+
+const snapMesSel = document.getElementById('snapMesSel');
+if (snapMesSel) {
+  snapMesSel.addEventListener('change', async (e) => {
+    const periodoActivo = document.querySelector('.period-toggle button.active')?.dataset.period || 'mes';
+    const r = await fetch('/api/ventas/snap?mes=' + encodeURIComponent(e.target.value));
+    if (r.status === 401) { window.location.href = '/'; return; }
+    RAW = await r.json();
+    etiquetarPeriodos();
+    render(periodoActivo);
+  });
+}
+
 render('mes');

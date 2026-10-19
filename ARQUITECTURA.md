@@ -172,6 +172,19 @@ porque `.seg` original solo estilaba `label`+`input` (radios), no
 `button`. Listener muerto sacado de `app.js` (escuchaba los radios
 `snapPeriod` que ya no existen).
 
+**Selector de mes en el sidebar** (pedido explícito 2026-10-19: "en el
+sidebar tiene que decir qué mes querés ver... en el caso de ytd, hasta qué
+mes"): `<select id="snapMesSel">` en `sidebar.html`, poblado por
+`snap.js` con `RAW.meses_disponibles` (`_meses_disponibles()` en
+`snap.py`, lista "YYYY-MM" desde `DESDE_HISTORICO` 2025-09 hasta el
+último mes CERRADO). Un solo selector controla ambas pestañas: Monthly
+muestra ese mes, YTD va desde el inicio del ejercicio fiscal hasta ese
+mismo mes (así lo arma `snap()` en snap.py). Cambiar el selector dispara
+`fetch('/api/ventas/snap?mes=YYYY-MM')` (nuevo query param opcional en el
+endpoint, default al último mes cerrado si no se pasa o no está en la
+lista de disponibles) y reemplaza `RAW` completo en memoria -- no hace
+falta recargar la página.
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com

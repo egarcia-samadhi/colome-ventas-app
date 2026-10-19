@@ -215,8 +215,8 @@ def _sumar(label: str, filas: list[dict]) -> dict:
 def ventas_sbl(desde: date, hasta_incl: date) -> list[dict | None]:
     """Filas de Sales by Line of Business para el rango [desde, hasta_incl].
     LY se calcula para el mismo rango corrido un año atrás, SOLO si ese
-    rango cae dentro del histórico real (>= 2025-09-01)."""
-    DESDE_HISTORICO = date(2025, 9, 1)
+    rango cae dentro del histórico real (>= 2025-09-01, ver DESDE_HISTORICO
+    más abajo en el archivo)."""
     agg = _agregado_sbl(desde, hasta_incl)
 
     desde_ly = date(desde.year - 1, desde.month, desde.day)
@@ -298,12 +298,33 @@ def combos_sin_clasificar(desde: date, hasta_incl: date) -> list[dict]:
     return out
 
 
-def _mes_cerrado_anterior() -> tuple[date, date]:
-    hoy = date.today()
-    anio, mes = (hoy.year, hoy.month - 1) if hoy.month > 1 else (hoy.year - 1, 12)
+DESDE_HISTORICO = date(2025, 9, 1)  # mismo arranque del histórico real que panel_ventas.py/otros_analisis.py/auditoria.py
+
+
+def _rango_mes(anio: int, mes: int) -> tuple[date, date]:
     desde = date(anio, mes, 1)
     hasta_excl = date(anio + 1, 1, 1) if mes == 12 else date(anio, mes + 1, 1)
     return desde, hasta_excl - timedelta(days=1)
+
+
+def _mes_cerrado_anterior() -> tuple[date, date]:
+    hoy = date.today()
+    anio, mes = (hoy.year, hoy.month - 1) if hoy.month > 1 else (hoy.year - 1, 12)
+    return _rango_mes(anio, mes)
+
+
+def _meses_disponibles() -> list[str]:
+    """Lista "YYYY-MM" desde el inicio del histórico real hasta el último
+    mes cerrado -- para poblar el selector de mes del sidebar (pedido
+    explícito de Ezequiel 2026-10-19: "en el sidebar tiene que decir qué
+    mes querés ver")."""
+    _, hasta_cerrado = _mes_cerrado_anterior()
+    out = []
+    anio, mes = DESDE_HISTORICO.year, DESDE_HISTORICO.month
+    while date(anio, mes, 1) <= hasta_cerrado:
+        out.append(f"{anio:04d}-{mes:02d}")
+        anio, mes = (anio + 1, 1) if mes == 12 else (anio, mes + 1)
+    return out
 
 
 def require_reader(request: Request):
@@ -315,12 +336,20 @@ def require_reader(request: Request):
 
 
 @router.get("/snap")
-async def snap(user=Depends(require_reader)):
-    """{sbl_mes, sbl_ytd, periodo, desde_ytd, hasta_ytd} -- "mes" es siempre
-    el último mes calendario CERRADO (el actual todavía puede recibir
-    comprobantes tarde), "ytd" es desde el inicio del ejercicio fiscal
-    (julio) hasta ese mismo mes cerrado."""
-    desde_mes, hasta_mes = _mes_cerrado_anterior()
+async def snap(mes: str | None = None, user=Depends(require_reader)):
+    """{sbl_mes, sbl_ytd, periodo, desde_ytd, hasta_ytd, meses_disponibles}.
+    `mes` (query param "YYYY-MM", opcional) elige qué mes mostrar en
+    "Monthly" -- y hasta qué mes llega el YTD (desde el inicio del
+    ejercicio fiscal). Sin `mes`, default al último mes calendario CERRADO
+    (el actual todavía puede recibir comprobantes tarde). Selector pedido
+    explícito de Ezequiel 2026-10-19 -- antes el mes cerrado era fijo, sin
+    forma de elegir otro."""
+    disponibles = _meses_disponibles()
+    if mes and mes in disponibles:
+        anio, mes_num = (int(x) for x in mes.split("-"))
+        desde_mes, hasta_mes = _rango_mes(anio, mes_num)
+    else:
+        desde_mes, hasta_mes = _mes_cerrado_anterior()
     desde_ytd = inicio_ejercicio_fiscal(hasta_mes)
     if desde_ytd > desde_mes:
         desde_ytd = desde_mes
@@ -328,6 +357,7 @@ async def snap(user=Depends(require_reader)):
         "periodo": hasta_mes.strftime("%Y-%m"),
         "desde_ytd": desde_ytd.isoformat(),
         "hasta_ytd": hasta_mes.isoformat(),
+        "meses_disponibles": disponibles,
         "sbl_mes": ventas_sbl(desde_mes, hasta_mes),
         "sbl_ytd": ventas_sbl(desde_ytd, hasta_mes),
     }
