@@ -224,7 +224,6 @@ def ventas_sbl(desde: date, hasta_incl: date) -> list[dict | None]:
     ly = _agregado_sbl(desde_ly, hasta_ly) if desde_ly >= DESDE_HISTORICO else None
 
     domestic = _fila("Grupo Colome Domestic", agg, ly, sin_costeo=True)
-    airlines = _fila("Grupo Colome Domestic - AirLines", agg, ly, sin_costeo=True)
     export_ = _fila("Grupo Colome Export", agg, ly, sin_costeo=True)
     brand_total = _sumar("Total Grupo Colome Brand", [domestic, export_])
 
@@ -242,16 +241,24 @@ def ventas_sbl(desde: date, hasta_incl: date) -> list[dict | None]:
 
     total = _sumar("TOTAL SALES", [tercero_total, intercompany_total])
 
+    # Filas mostradas = exactamente las filas NO ocultas en el SNAP real de
+    # Ariel (SNAP I September 2026 - NM - VSP 2.xls, hoja "Sales by line of
+    # bussines", confirmado con xlrd leyendo el flag `hidden` de cada fila
+    # -- Ezequiel sospechó que estaba viendo filas ocultas del Excel, y así
+    # era). Ocultas ahí (y acá): "Grupo Colome Domestic - AirLines" (dato
+    # informativo, sigue sumado DENTRO de Domestic), todo "Total Buyers Own
+    # Brand (BOB)" (Ascension */Others/subtotal -- 0 fijo, ver
+    # investigación arriba) y todo "Total Intercompany Sales" (GC Wines
+    # Uruguay S.A. -- también 0 fijo). `airlines`, `bob_rows`/`bob_total` y
+    # `uy`/`intercompany_total` se siguen calculando (entran en
+    # `tercero_total`/`total` igual que en el SNAP real), solo no se
+    # exponen como fila propia.
     return [
-        domestic, airlines, export_, brand_total,
+        domestic, export_, brand_total,
         None,
-        *dtc_fijas, otro_dtc, dtc_channel,
-        None,
-        *bob_rows, bob_total,
+        *dtc_fijas, dtc_channel,
         None,
         tercero_total,
-        None,
-        uy, intercompany_total,
         None,
         total,
     ]

@@ -581,7 +581,6 @@
     renderPeriodoChips();
     refresh();
   });
-  $('sbSnap').addEventListener('change', e => { if (e.target.name === 'snapPeriod') render(e.target.value); });
   $('view-panel').addEventListener('change', e => {
     if (e.target.name === 'pvMetrica') { st.metrica = e.target.value; renderPanel(); }
     else if (e.target.name === 'pvDim') { st.dim = e.target.value; st.dgSort = 'usd'; st.dgDir = 'desc'; renderPanel(); }

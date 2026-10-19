@@ -5,10 +5,14 @@
           <label><input type="radio" name="snapTab" value="fdelmotte"> FdelMotte</label>
         </div>
         <div id="snapConsolidado">
+          <div class="seg period-toggle" role="radiogroup" aria-label="Período" style="margin-bottom:14px">
+            <button type="button" data-period="mes" class="active">Monthly</button>
+            <button type="button" data-period="ytd">YTD</button>
+          </div>
           <div class="stat-row" id="statRow"></div>
           <section class="panel">
             <h2>Sales by Line of Business</h2>
-            <div class="panel-sub">Valores de venta en USD (000s) y equivalente 9 litros. Actual vs. Budget vs. Last Year.</div>
+            <div class="panel-sub">Valores de venta en USD (000s) y equivalente 9 litros. Actual vs. Last Year.</div>
             <div id="sblTable"></div>
           </section>
         </div>

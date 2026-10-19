@@ -147,6 +147,31 @@ pedido explícito de Ezequiel (2026-10-19) en vez de conectarlo en vivo --
 sección eliminada de `content.html`/`snap.js`/`sidebar.html`, `fetchSnap()`
 ya no depende de `colome-data.json`.
 
+**Filas ocultas en el SNAP real, replicado 2026-10-19**: Ezequiel compartió
+`SNAP I September 2026 - NM - VSP 2.xls` (hoja "Sales by line of
+bussines") con filas depuradas por Ariel -- confirmado con xlrd leyendo el
+flag `hidden` de cada fila que el Excel real OCULTA (no borra):
+"Grupo Colome Domestic - AirLines" (informativo, sigue sumado dentro de
+Domestic), todo "Total Buyers Own Brand (BOB)" (Ascension
+Malbec/Reserva/Torrontes/Others + subtotal -- 0 fijo) y todo "Total
+Intercompany Sales" (GC Wines Uruguay S.A. -- 0 fijo). `ventas_sbl()` en
+`snap.py` replica esto: sigue CALCULANDO esas líneas (entran en
+`tercero_total`/`total` igual que en el SNAP real) pero no las devuelve en
+la lista de filas mostradas -- filas visibles finales: Domestic, Export,
+Total Grupo Colome Brand, Employees/E-commerce/Colome Hotel/Colome Visitor
+Center/Cafayate Visitor Center, Direct-to-consumer Channel, TOTAL SALES TO
+THIRD PARTIES, TOTAL SALES.
+
+**Pestañas Monthly/YTD movidas del sidebar al contenido** (pedido explícito
+2026-10-19): antes vivían como chips de radio en `sidebar.html`
+(`name="snapPeriod"`, español, "Agosto 2026"/"YTD Jul–Ago"); ahora son
+botones `.period-toggle` dentro de `#snapConsolidado` en `content.html`,
+en inglés ("Monthly"/"YTD (rango real)"), mismo patrón visual `.seg` que
+el toggle Consolidado/FdelMotte. CSS nueva en `ventas.css` (`.seg button`)
+porque `.seg` original solo estilaba `label`+`input` (radios), no
+`button`. Listener muerto sacado de `app.js` (escuchaba los radios
+`snapPeriod` que ya no existen).
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com

@@ -105,21 +105,13 @@ function render(period) {
   document.getElementById('sblTable').innerHTML = renderSbl(period === 'mes' ? RAW.sbl_mes : RAW.sbl_ytd);
 }
 
-// Labels del toggle de período (Mes cerrado actual / YTD del ejercicio
-// fiscal) -- antes decían "Agosto 2026" fijo, ahora vienen del backend
-// (RAW.periodo/desde_ytd/hasta_ytd, ver snap.py).
+// Pestañas Monthly/YTD (movidas del sidebar al contenido -- pedido
+// explícito de Ezequiel 2026-10-19, "solo exponer sales by line, en dos
+// pestañas monthly/ytd"). El botón YTD muestra el rango real del backend
+// (RAW.desde_ytd/hasta_ytd, ver snap.py); Monthly muestra RAW.periodo.
 (function etiquetarPeriodos() {
-  const radios = document.querySelectorAll('input[name="snapPeriod"]');
-  radios.forEach(r => {
-    const label = r.closest('label');
-    if (!label) return;
-    if (r.value === 'aug') {
-      r.value = 'mes';
-      label.lastChild.textContent = ' ' + RAW.periodo;
-    } else if (r.value === 'ytd') {
-      label.lastChild.textContent = ` YTD (${RAW.desde_ytd} a ${RAW.hasta_ytd})`;
-    }
-  });
+  const btnYtd = document.querySelector('.period-toggle button[data-period="ytd"]');
+  if (btnYtd) btnYtd.textContent = `YTD (${RAW.desde_ytd} a ${RAW.hasta_ytd})`;
 })();
 
 document.querySelectorAll('.period-toggle button').forEach(btn => {
@@ -129,8 +121,4 @@ document.querySelectorAll('.period-toggle button').forEach(btn => {
     render(btn.dataset.period);
   });
 });
-
-// El cambio de período (radios "snapPeriod") ya lo escucha app.js por
-// delegación en #sbSnap (`$('sbSnap').addEventListener('change', ...)`) --
-// no duplicar el listener acá.
 render('mes');

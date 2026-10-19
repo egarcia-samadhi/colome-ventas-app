@@ -104,6 +104,9 @@
   .seg label:has(input:checked) { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 2px 6px rgba(28,24,17,.1); }
   .seg label:has(input:focus-visible) { outline: 2px solid var(--gold-d); }
   .seg.dark label:has(input:checked) { background: #1c1811; color: var(--gold); }
+  .seg button { font: inherit; font-size: 11.5px; padding: 7px 14px; border-radius: 999px; border: none; background: transparent; color: var(--muted); cursor: pointer; font-weight: 500; }
+  .seg button.active { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: 0 2px 6px rgba(28,24,17,.1); }
+  .seg button:focus-visible { outline: 2px solid var(--gold-d); }
   .btn { font: inherit; font-size: 11.5px; font-weight: 600; padding: 9px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--head-text); cursor: pointer; transition: all .15s; }
   .btn:hover:not(:disabled) { background: var(--bg); border-color: var(--gold-d); color: var(--ink); }
   .btn:disabled { opacity: .5; cursor: not-allowed; color: var(--muted); }
