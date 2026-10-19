@@ -26,13 +26,15 @@ HOSPITALIDAD que no matchean ninguna regla de Datos Maestros caen en "Otro
 DTC/Hospitalidad" (se siguen sumando al total, solo no tienen nombre propio
 todavía -- el admin agrega la regla faltante desde Datos Maestros).
 
-BOB (Ascension Malbec/Reserva/Torrontes/Others) e Intercompany (GC Wines
-Uruguay S.A.) quedan en 0 FIJO -- investigado 2026-10-19: no hay ninguna
-venta real bajo la marca "Ascension" en los 13 meses de histórico, y las
-únicas líneas de "GRUPO COLOME WINES URUGUAY S.A." en ig_ventas son
-`d_grupo="REDLINE GASTOS"` (gastos administrativos, fuera del universo
-VINOS **) -- no es una omisión, es que esos canales todavía no tienen
-ventas de vino registradas en Redline.
+BOB (Others) e Intercompany (GC Wines Uruguay S.A.) quedan en 0 FIJO --
+investigado 2026-10-19: no hay ninguna venta real bajo la marca "Ascension"
+en los 13 meses de histórico, y las únicas líneas de "GRUPO COLOME WINES
+URUGUAY S.A." en ig_ventas son `d_grupo="REDLINE GASTOS"` (gastos
+administrativos, fuera del universo VINOS **) -- no es una omisión, es que
+esos canales todavía no tienen ventas de vino registradas en Redline.
+Filas "Ascension Malbec/Reserva/Torrontes" sacadas de la hoja (pedido
+explícito de Ezequiel 2026-10-19): sin venta real nunca, no aportaban nada
+mostrando 3 filas en 0 -- queda solo "Others" dentro de BOB.
 
 Last Year: solo se muestra si hay dato real (mismo mes/rango del año
 anterior, posible desde que arrancó el histórico real en 2025-09-01) --
@@ -230,7 +232,7 @@ def ventas_sbl(desde: date, hasta_incl: date) -> list[dict | None]:
     otro_dtc = _fila("Otro DTC/Hospitalidad", agg, ly)
     dtc_channel = _sumar("Direct-to-consumer Channel", dtc_fijas + [otro_dtc])
 
-    bob_rows = [_cero(l) for l in ("Ascension Malbec", "Ascension Reserva", "Ascension Torrontes", "Others")]
+    bob_rows = [_cero(l) for l in ("Others",)]
     bob_total = _sumar("Total Buyers Own Brand (BOB)", bob_rows)
 
     tercero_total = _sumar("TOTAL SALES TO THIRD PARTIES", [brand_total, dtc_channel, bob_total])
