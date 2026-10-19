@@ -271,6 +271,23 @@ function SnapLineaNegocioMapa() {
 
   useEffect(load, [load]);
 
+  // Deep-link desde Panel de Controles (pedido explícito 2026-10-19:
+  // "desde controles debe poder resolverse cada problema" -- no alcanza
+  // con linkear a la pestaña general, cada combinación puntual tiene que
+  // abrir ya precargada). /datos-maestros/?tab=snap&cc=...&cat=...&cv=...
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("tab") !== "snap") return;
+    if (!qs.has("cc") && !qs.has("cat") && !qs.has("cv")) return;
+    setMostrarAlta(true);
+    setAlta({
+      centro_costo: qs.get("cc") || "",
+      categoria: qs.get("cat") || "",
+      canal_venta: qs.get("cv") || "",
+      linea_negocio: "",
+    });
+  }, []);
+
   const startEdit = (r: FilaSnapMapa) => {
     setEditando(r.id);
     setForm({ centro_costo: r.centro_costo || "", categoria: r.categoria || "", canal_venta: r.canal_venta || "", linea_negocio: r.linea_negocio });

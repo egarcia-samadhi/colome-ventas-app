@@ -240,6 +240,38 @@ quedaba congelado en lo que fuera que content.html tenía por default
 de Ventas muestra "n/d" en la columna Budget en vez de `NaN` (`hasBud`
 separado de `has`/LY).
 
+**Segundo hallazgo verificando el fix de arriba**: después de deployar,
+una pestaña YA ABIERTA seguía tirando el mismo error -- el navegador
+servía una copia VIEJA de `app.js` desde su cache HTTP (confirmado con
+`curl -sv` sin sesión: la ruta redirige a SSO, así que no fue eso; el
+problema era la pestaña con sesión real sirviendo el `app.js` cacheado de
+antes del deploy) pese al `Cache-Control: no-cache` del backend -- mismo
+patrón ya documentado en la norma de trabajo "Cache-Control en FastAPI
+FileResponse". `page.tsx` ahora usa un helper `fetchFresh()` con
+`{cache: "reload"}` para los 6 fetches de assets estáticos de `/ventas/`
+(sidebar.html, content.html, snap.js, app.js) -- fuerza al navegador a
+revalidar contra el servidor siempre, no solo confiar en el header de
+respuesta.
+
+**Footer viejo sacado de Sales Performance**: `content.html` tenía un
+`<footer class="meta">` con la leyenda original del mock ("Mock de
+referencia — dato estático... Próximo paso: conectar todo al endpoint en
+vivo"), señalado por Ezequiel como "esto esta de mas" -- obsoleto desde
+que Sales by Line of Business y Panel de Ventas/Región están en vivo.
+
+**Deep-link "Corregir" por fila en el control `sbl_sin_clasificar`**
+(pedido explícito 2026-10-19: "acordate que desde controles debe poder
+resolverse cada problema" -- el link genérico a `/datos-maestros/?tab=snap`
+no alcanzaba, había que resolver CADA combinación puntual sin copiar a
+mano). `controles.py` manda `centro_costo`/`categoria`/`canal_venta`
+estructurados en cada item (no solo el string concatenado `valor`);
+`controles/page.tsx` arma un link por fila a
+`/datos-maestros/?tab=snap&cc=...&cat=...&cv=...`; `datos-maestros/page.tsx`
+(`SnapLineaNegocioMapa`) lee esos query params al montar y abre el
+formulario de alta ya precargado -- mismo resultado que
+`precargarDesdeCombo()` (usado también desde la propia pestaña de Datos
+Maestros), pero disparado por URL en vez de un click local.
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com

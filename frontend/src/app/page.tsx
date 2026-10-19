@@ -88,6 +88,14 @@ export default function VentasPage() {
       document.body.appendChild(snapScript);
     };
 
+    // cache:"reload" en TODOS los assets estáticos de /ventas/ -- bug real
+    // 2026-10-19: el navegador servía una copia vieja de app.js (sbl_aug en
+    // vez de sbl_mes) desde su cache HTTP incluso con Cache-Control:
+    // no-cache del backend, rompiendo la navegación después de un deploy
+    // sin que hiciera falta un hard-refresh manual (ver norma de trabajo
+    // "Cache-Control en FastAPI FileResponse").
+    const fetchFresh = (url: string) => fetch(url, { cache: "reload" }).then((r) => r.text());
+
     const fetchSnap = () => fetch("/api/ventas/snap").then((r) => {
       if (r.status === 401) { window.location.href = "/"; return "{}"; }
       return r.text();
@@ -117,12 +125,12 @@ export default function VentasPage() {
       // snap.js -> colome-facts -> app.js (éste último es el que lee el
       // hash y decide la pestaña, evitando el flash de Sales Performance).
       Promise.all([
-        fetch("/ventas/sidebar.html").then((r) => r.text()),
-        fetch("/ventas/content.html").then((r) => r.text()),
+        fetchFresh("/ventas/sidebar.html"),
+        fetchFresh("/ventas/content.html"),
         fetchSnap(),
         fetchPanel(),
-        fetch("/ventas/snap.js").then((r) => r.text()),
-        fetch("/ventas/app.js").then((r) => r.text()),
+        fetchFresh("/ventas/snap.js"),
+        fetchFresh("/ventas/app.js"),
       ]).then(([sidebarHtml, contentHtml, dataJson, factsJson, snapJs, appJs]) => {
         if (sidebarRef.current) sidebarRef.current.innerHTML = sidebarHtml;
         if (contentRef.current) contentRef.current.innerHTML = contentHtml;
@@ -134,10 +142,10 @@ export default function VentasPage() {
     }
 
     Promise.all([
-      fetch("/ventas/sidebar.html").then((r) => r.text()),
-      fetch("/ventas/content.html").then((r) => r.text()),
+      fetchFresh("/ventas/sidebar.html"),
+      fetchFresh("/ventas/content.html"),
       fetchSnap(),
-      fetch("/ventas/snap.js").then((r) => r.text()),
+      fetchFresh("/ventas/snap.js"),
     ]).then(([sidebarHtml, contentHtml, dataJson, snapJs]) => {
       if (sidebarRef.current) sidebarRef.current.innerHTML = sidebarHtml;
       if (contentRef.current) contentRef.current.innerHTML = contentHtml;
@@ -152,7 +160,7 @@ export default function VentasPage() {
       // Ventas por Región (y la navegación entre pestañas, que maneja
       // app.js) quedan disponibles apenas termine, sin congelar Sales
       // Performance mientras tanto.
-      Promise.all([fetchPanel(), fetch("/ventas/app.js").then((r) => r.text())])
+      Promise.all([fetchPanel(), fetchFresh("/ventas/app.js")])
         .then(([factsJson, appJs]) => inyectarPanel(factsJson, appJs));
     });
   }, []);

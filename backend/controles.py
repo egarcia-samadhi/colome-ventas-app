@@ -121,7 +121,13 @@ async def controles(admin=Depends(require_admin)):
             "ok": not combos_sbl,
             "cantidad": len(combos_sbl),
             "items": [
-                {"valor": f'{c["centro_costo"] or "(vacío)"} / {c["categoria"]} / {c["canal_venta"] or "(vacío)"}', "filas": c["filas"]}
+                {
+                    "valor": f'{c["centro_costo"] or "(vacío)"} / {c["categoria"]} / {c["canal_venta"] or "(vacío)"}',
+                    "filas": c["filas"],
+                    "centro_costo": c["centro_costo"],
+                    "categoria": c["categoria"],
+                    "canal_venta": c["canal_venta"],
+                }
                 for c in combos_sbl[:15]
             ],
         },

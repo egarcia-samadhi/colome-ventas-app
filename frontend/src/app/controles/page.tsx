@@ -19,7 +19,19 @@ import { AppShell } from "@/components/AppShell";
 //   Jurisdicción -- el botón abre un modal mínimo (mismo endpoint POST que
 //   datos-maestros/page.tsx) con el valor ya precargado, para no tener que
 //   copiarlo a mano.
-interface Item { valor: string; filas: number }
+// - sbl_sin_clasificar: alta de fila en Datos Maestros → SNAP Línea de
+//   negocio, pero esa página ya tiene su propio formulario -- en vez de
+//   duplicarlo acá, el link de cada ítem deep-linkea con los 3 campos ya
+//   precargados por query string (2026-10-19, pedido explícito: "desde
+//   controles debe poder resolverse cada problema", no alcanzaba con un
+//   link genérico a la pestaña sin el combo puntual).
+interface Item {
+  valor: string;
+  filas: number;
+  centro_costo?: string | null;
+  categoria?: string | null;
+  canal_venta?: string | null;
+}
 interface Control {
   id: string;
   label: string;
@@ -172,22 +184,13 @@ export default function ControlesPage() {
                       </a>
                     )}
 
-                    {c.id === "sbl_sin_clasificar" && !c.ok && (
-                      <a
-                        href="/datos-maestros/?tab=snap"
-                        className="inline-block text-[11px] text-[#7D4E5B] hover:text-[#9F6375] underline mb-3"
-                      >
-                        Ir a clasificar en Datos Maestros →
-                      </a>
-                    )}
-
                     {c.items && c.items.length > 0 && (
                       <table className="w-full text-[12px]">
                         <thead>
                           <tr className="text-[#847c68] uppercase tracking-wide text-[10px]">
                             <th className="text-left py-1">Valor sin mapear</th>
                             <th className="text-right py-1">Filas afectadas</th>
-                            {c.id === "jurisdiccion_sin_clasificar" && <th className="w-20" />}
+                            {(c.id === "jurisdiccion_sin_clasificar" || c.id === "sbl_sin_clasificar") && <th className="w-20" />}
                           </tr>
                         </thead>
                         <tbody>
@@ -203,6 +206,16 @@ export default function ControlesPage() {
                                   >
                                     Corregir
                                   </button>
+                                </td>
+                              )}
+                              {c.id === "sbl_sin_clasificar" && (
+                                <td className="py-1.5 text-right">
+                                  <a
+                                    href={`/datos-maestros/?tab=snap&cc=${encodeURIComponent(it.centro_costo || "")}&cat=${encodeURIComponent(it.categoria || "")}&cv=${encodeURIComponent(it.canal_venta || "")}`}
+                                    className="text-[11px] text-[#7D4E5B] hover:text-[#9F6375] underline"
+                                  >
+                                    Corregir
+                                  </a>
                                 </td>
                               )}
                             </tr>
