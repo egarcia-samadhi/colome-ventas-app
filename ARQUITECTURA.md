@@ -324,6 +324,40 @@ contra AFIP) -- el patrón de código "se ve igual" no implica que el bug
 sea el mismo; acá dos funciones con el MISMO código fuente tenían
 comportamiento correcto opuesto según si filtraban VINOS ** o no.
 
+**Residuo sin cerrar, investigado a fondo 2026-10-19**: después del fix de
+arriba, YTD en vivo = USD 1.685,29 (miles) vs. USD 1.676,68 real de Ariel
+-- 0,5% de diferencia (dentro de la tolerancia ya aceptada en agosto, pero
+Ezequiel pidió seguir investigando: "sigo viendo los 1685 vs 1676").
+Desglosado línea por línea: Domestic/Export/Hotel cierran casi exacto
+(Colome Hotel exacto al centavo); el 82% del residuo (7 de 8,6k) está en
+**E-commerce**, repartido en ~1.150 facturas chicas bajo el cliente
+genérico "CLIENTE NO HABITUAL CANAL ONLINE" (no en 2-3 outliers). Se
+descartó tipo de cambio (Domestic usa el mismo tipo de cambio implícito y
+sí cierra) y duplicados (coincidencias fecha+monto repetidas son precios
+de catálogo iguales entre compradores distintos, no duplicados). Hipótesis
+de trabajo sin confirmar: e-commerce postea con demora en Redline (pedidos
+online tardan más en facturarse que el mayorista), así que el Excel
+estático de Ariel pudo haberse generado antes de que esos pedidos
+terminaran de cargarse -- el número en vivo sería MÁS completo, no
+erróneo. **No se puede confirmar sin el detalle transacción por
+transacción de Ariel** (Ezequiel prefirió no pedirlo todavía: "no
+entendemos que tiene que ver, si lo que es venta es venta").
+
+**Refactor estructural en respuesta** (pedido explícito: "no tenemos que
+partir de cosas distintas, los mismos 1676 asignandole la clasificacion
+tienen que ir al snap"): `_agregado_sbl()` y `combos_sin_clasificar()` en
+`snap.py` tenían su PROPIO loop `_fetch_dia`+dedupe+filtro
+TIPOS_VALIDOS/GRUPO_VALIDO, duplicado en paralelo al de `_lineas_vinos()`
+(ig_ventas.py, ya usado por Otros Análisis). Refactorizado para que ambas
+funciones CONSUMAN `_lineas_vinos()` directamente -- la clasificación en
+líneas de negocio ahora es una capa sobre las MISMAS filas que usa el
+resto de la app, no una reconsulta independiente. Validado que el total
+no cambió (1685,2861 antes y después, solo redondeo) -- el refactor
+elimina la posibilidad de que las dos funciones diverjan a futuro por
+mantenerse por separado, pero NO cierra el residuo de 0,5% contra Ariel
+(que no es un problema de pipeline duplicado, ya que Otros Análisis daba
+el mismo número).
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com

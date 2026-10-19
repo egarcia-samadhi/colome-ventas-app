@@ -56,7 +56,7 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ig_ventas import TIPOS_VALIDOS, _fetch_dia
+from ig_ventas import _lineas_vinos
 
 router = APIRouter(prefix="/api/ventas", tags=["snap"])
 
@@ -102,83 +102,73 @@ def _clasificar_dtc(it: dict, reglas: list[dict]) -> str:
 
 
 def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
-    """{linea: [usd, cajas, costo_usd]} para el rango dado."""
+    """{linea: [usd, cajas, costo_usd]} para el rango dado.
+
+    REFACTOR 2026-10-19 (pedido explícito de Ezequiel: "no tenemos que
+    partir de cosas distintas, los mismos 1676 asignandole la
+    clasificacion tienen que ir al snap"): antes esta función tenía su
+    PROPIO loop `_fetch_dia`+dedupe+filtro TIPOS_VALIDOS/GRUPO_VALIDO,
+    reimplementado en paralelo al de `_lineas_vinos()` (el generador que ya
+    usa Otros Análisis -> Por Cliente/SKU/Vendedor, y por el que también se
+    guía Panel de Ventas). Dos pipelines separados para el MISMO universo
+    de datos es la causa estructural de que puedan divergir -- cualquier
+    corrección futura (ej. el fix de doble-signo de NC) tenía que aplicarse
+    dos veces y podía quedar desincronizada. Ahora Sales by Line of
+    Business CONSUME el mismo generador que el resto de la app: la
+    clasificación en líneas de negocio se aplica como una capa sobre las
+    MISMAS filas, no sobre una reconsulta independiente a ig_ventas."""
     reglas = _mapa_linea_negocio()
     acc: dict[str, list[float]] = {}
-    vistos_global = set()
-    dia = desde
-    while dia <= hasta_incl:
-        for it in _fetch_dia(dia):
-            key = (it.get("id"), it.get("det_id"))
-            if key in vistos_global:
-                continue
-            vistos_global.add(key)
-            if it.get("d_tipo_compro") not in TIPOS_VALIDOS:
-                continue
-            if it.get("d_grupo") != "VINOS **":
-                continue
-            if it.get("d_rubro") == "FDELMOTTE **":
-                # FdelMotte existe en ig_ventas pero el Excel/SNAP real de la
-                # empresa no la tiene -- se separa del consolidado, mismo
-                # criterio ya confirmado con Ariel Culasso 2026-10-09 para
-                # Panel de Ventas (ver proyecto_colome_fdelmotte_separada).
-                continue
-            categoria = it.get("d_categoria") or ""
-            if categoria in DOMESTIC_WHOLESALE:
-                linea = "Grupo Colome Domestic"
-            elif categoria in EXPORT:
-                linea = "Grupo Colome Export"
-            elif categoria in DTC_HOSPITALIDAD:
-                linea = _clasificar_dtc(it, reglas)
-            else:
-                # categoria fuera de las 6 conocidas -- no debería pasar nunca,
-                # pero antes de la fila "Sin clasificar" (2026-10-19) esto se
-                # perdía en silencio de TODOS los totales (bug real: el bucket
-                # "Otro" se acumulaba pero ninguna fila lo leía).
-                linea = "Sin clasificar"
-            # BUG REAL corregido 2026-10-19 (reportado por Ezequiel: "1695
-            # hoja vs 1676 hoja de ventas, no coincide la venta en dolares en
-            # el ytd"): los campos que trae la API de Redline para una NOTA
-            # CREDITO VENTA (valor_venta_mon_alt, cantidad_cajas9l, cantidad)
-            # YA VIENEN CON SIGNO NEGATIVO (verificado con filas reales:
-            # cantidad=-10, cantidad_cajas9l=-5, valor_venta_mon_alt=-214.67
-            # para una NC real). Multiplicar OTRA VEZ por -1 acá convertía la
-            # Nota de Crédito en venta positiva en vez de restarla -- YTD en
-            # vivo daba USD 1.694,56 (miles) contra el real de Ariel (SNAP I
-            # September 2026, fila TOTAL SALES) de USD 1.676,68 -- ~18k de
-            # diferencia, consistente con 2x el monto de NC del período. Se
-            # saca el `signo`: los campos usados acá van tal cual vienen.
-            usd_linea = float(it.get("valor_venta_mon_alt") or 0)
-            usd = usd_linea
-            cajas = float(it.get("cantidad_cajas9l") or 0)
-            costo_linea = float(it.get("costo_unit_mon_alt") or 0) * float(it.get("cantidad") or 0)
-            # Guarda contra costo_unit_mon_alt corrupto en el origen (ej.
-            # "AMALAYA BLANCO DULCE" vendida por VENTA AL PERSONAL en
-            # agosto-2026: costo unitario de ~USD 1.87M contra un precio de
-            # venta de ~USD 2.70 -- rompía el %MG a valores sin sentido como
-            # -19753%). Dos condiciones, cualquiera descarta ESE costo
-            # puntual (no el ingreso): 1) supera 10x su propio ingreso
-            # (cuando hay ingreso), o 2) supera un techo absoluto de USD 500
-            # -- necesario SOLO con la condición 1 el guard no disparaba en
-            # líneas de ingreso EXACTAMENTE 0 (ej. degustación gratis/100%
-            # desc.), porque `if usd_linea` es falsy con 0.0 y el costo
-            # corrupto pasaba entero. Hasta que Ariel/Redline confirme el
-            # dato real -- pedido explícito de Ezequiel 2026-10-19.
-            TECHO_COSTO_ABSOLUTO = 500.0
-            if (usd_linea and costo_linea > usd_linea * 10) or costo_linea > TECHO_COSTO_ABSOLUTO:
-                costo_linea = 0.0
-            costo_usd = costo_linea
-            a = acc.setdefault(linea, [0.0, 0.0, 0.0])
-            a[0] += usd
-            a[1] += cajas
-            a[2] += costo_usd
-            # AirLines es informativo DENTRO de Domestic, no se resta/separa
-            if categoria in DOMESTIC_WHOLESALE and it.get("d_canal_venta") == "AEROPUERTOS":
-                b = acc.setdefault("Grupo Colome Domestic - AirLines", [0.0, 0.0, 0.0])
-                b[0] += usd
-                b[1] += cajas
-                b[2] += costo_usd
-        dia += timedelta(days=1)
+    for it in _lineas_vinos(desde, hasta_incl):
+        if it.get("d_rubro") == "FDELMOTTE **":
+            # FdelMotte existe en ig_ventas pero el Excel/SNAP real de la
+            # empresa no la tiene -- se separa del consolidado, mismo
+            # criterio ya confirmado con Ariel Culasso 2026-10-09 para
+            # Panel de Ventas (ver proyecto_colome_fdelmotte_separada).
+            continue
+        categoria = it.get("d_categoria") or ""
+        if categoria in DOMESTIC_WHOLESALE:
+            linea = "Grupo Colome Domestic"
+        elif categoria in EXPORT:
+            linea = "Grupo Colome Export"
+        elif categoria in DTC_HOSPITALIDAD:
+            linea = _clasificar_dtc(it, reglas)
+        else:
+            # categoria fuera de las 6 conocidas -- no debería pasar nunca,
+            # pero antes de la fila "Sin clasificar" (2026-10-19) esto se
+            # perdía en silencio de TODOS los totales (bug real: el bucket
+            # "Otro" se acumulaba pero ninguna fila lo leía).
+            linea = "Sin clasificar"
+        usd_linea = float(it.get("valor_venta_mon_alt") or 0)
+        usd = usd_linea
+        cajas = float(it.get("cantidad_cajas9l") or 0)
+        costo_linea = float(it.get("costo_unit_mon_alt") or 0) * float(it.get("cantidad") or 0)
+        # Guarda contra costo_unit_mon_alt corrupto en el origen (ej.
+        # "AMALAYA BLANCO DULCE" vendida por VENTA AL PERSONAL en
+        # agosto-2026: costo unitario de ~USD 1.87M contra un precio de
+        # venta de ~USD 2.70 -- rompía el %MG a valores sin sentido como
+        # -19753%). Dos condiciones, cualquiera descarta ESE costo
+        # puntual (no el ingreso): 1) supera 10x su propio ingreso
+        # (cuando hay ingreso), o 2) supera un techo absoluto de USD 500
+        # -- necesario SOLO con la condición 1 el guard no disparaba en
+        # líneas de ingreso EXACTAMENTE 0 (ej. degustación gratis/100%
+        # desc.), porque `if usd_linea` es falsy con 0.0 y el costo
+        # corrupto pasaba entero. Hasta que Ariel/Redline confirme el
+        # dato real -- pedido explícito de Ezequiel 2026-10-19.
+        TECHO_COSTO_ABSOLUTO = 500.0
+        if (usd_linea and costo_linea > usd_linea * 10) or costo_linea > TECHO_COSTO_ABSOLUTO:
+            costo_linea = 0.0
+        costo_usd = costo_linea
+        a = acc.setdefault(linea, [0.0, 0.0, 0.0])
+        a[0] += usd
+        a[1] += cajas
+        a[2] += costo_usd
+        # AirLines es informativo DENTRO de Domestic, no se resta/separa
+        if categoria in DOMESTIC_WHOLESALE and it.get("d_canal_venta") == "AEROPUERTOS":
+            b = acc.setdefault("Grupo Colome Domestic - AirLines", [0.0, 0.0, 0.0])
+            b[0] += usd
+            b[1] += cajas
+            b[2] += costo_usd
     return acc
 
 
@@ -307,26 +297,14 @@ def combos_sin_clasificar(desde: date, hasta_incl: date) -> list[dict]:
     Maestros pueda mostrarlas y el admin agregue la regla que falta."""
     reglas = _mapa_linea_negocio()
     conteo: dict[tuple, int] = {}
-    vistos_global = set()
-    dia = desde
-    while dia <= hasta_incl:
-        for it in _fetch_dia(dia):
-            key = (it.get("id"), it.get("det_id"))
-            if key in vistos_global:
-                continue
-            vistos_global.add(key)
-            if it.get("d_tipo_compro") not in TIPOS_VALIDOS:
-                continue
-            if it.get("d_grupo") != "VINOS **":
-                continue
-            categoria = it.get("d_categoria") or ""
-            if categoria not in DTC_HOSPITALIDAD:
-                continue
-            if _clasificar_dtc(it, reglas) != "Sin clasificar":
-                continue
-            k = (it.get("d_centro_costo") or "", categoria, it.get("d_canal_venta") or "")
-            conteo[k] = conteo.get(k, 0) + 1
-        dia += timedelta(days=1)
+    for it in _lineas_vinos(desde, hasta_incl):
+        categoria = it.get("d_categoria") or ""
+        if categoria not in DTC_HOSPITALIDAD:
+            continue
+        if _clasificar_dtc(it, reglas) != "Sin clasificar":
+            continue
+        k = (it.get("d_centro_costo") or "", categoria, it.get("d_canal_venta") or "")
+        conteo[k] = conteo.get(k, 0) + 1
     out = [
         {"centro_costo": cc, "categoria": cat, "canal_venta": cv, "filas": n}
         for (cc, cat, cv), n in conteo.items()
