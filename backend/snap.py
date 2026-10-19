@@ -156,9 +156,15 @@ def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
 DTC_LINEAS_FIJAS = ["Employees", "E-commerce", "Colome Hotel", "Colome Visitor Center", "Cafayate Visitor Center"]
 
 
-def _fila(label: str, agg: dict[str, list[float]], ly: dict[str, list[float]] | None) -> dict:
+def _fila(label: str, agg: dict[str, list[float]], ly: dict[str, list[float]] | None, sin_costeo: bool = False) -> dict:
     usd, cajas, costo_usd = agg.get(label, [0.0, 0.0, 0.0])
-    gm_act = (usd - costo_usd) / usd if usd else "N/A"
+    # sin_costeo=True (Domestic/Export/AirLines, canal mayorista): el campo
+    # costo_unit_mon_alt viene prácticamente vacío en Redline para ese canal
+    # (verificado 2026-10-19: USD 2,26 de costo sobre USD 219.980 de venta
+    # en agosto-2026, 896 líneas) -- mostrar el %MG ahí daría ~100%, un
+    # número engañoso, no un margen real. Se marca N/A en vez de ocultar el
+    # hallazgo con un cálculo que no refleja la realidad.
+    gm_act = "N/A" if sin_costeo else ((usd - costo_usd) / usd if usd else "N/A")
     out = {
         "label": label,
         "usd_act": round(usd / 1000, 4),
@@ -215,9 +221,9 @@ def ventas_sbl(desde: date, hasta_incl: date) -> list[dict | None]:
     hasta_ly = date(hasta_incl.year - 1, hasta_incl.month, hasta_incl.day)
     ly = _agregado_sbl(desde_ly, hasta_ly) if desde_ly >= DESDE_HISTORICO else None
 
-    domestic = _fila("Grupo Colome Domestic", agg, ly)
-    airlines = _fila("Grupo Colome Domestic - AirLines", agg, ly)
-    export_ = _fila("Grupo Colome Export", agg, ly)
+    domestic = _fila("Grupo Colome Domestic", agg, ly, sin_costeo=True)
+    airlines = _fila("Grupo Colome Domestic - AirLines", agg, ly, sin_costeo=True)
+    export_ = _fila("Grupo Colome Export", agg, ly, sin_costeo=True)
     brand_total = _sumar("Total Grupo Colome Brand", [domestic, export_])
 
     dtc_fijas = [_fila(l, agg, ly) for l in DTC_LINEAS_FIJAS]
