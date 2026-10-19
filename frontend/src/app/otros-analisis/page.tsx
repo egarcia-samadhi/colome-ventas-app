@@ -13,6 +13,11 @@ import { AppShell } from "@/components/AppShell";
 // "% Desc C" de la hoja Por Cliente se OMITE a pedido explícito de Ezequiel
 // (2026-10-19): no hay un campo 1 a 1 en ig_ventas y no vale la pena
 // estimarlo sin validar la fórmula con Ariel.
+//
+// "% MG" se sacó de las 3 vistas (2026-10-19, pedido explícito de Ezequiel:
+// "saca esto por ahora") -- el backend (ig_ventas.py) sigue calculando
+// `mg_pct` en los 3 endpoints, solo se deja de mostrar acá. Si se vuelve a
+// pedir, alcanza con tocar esta pantalla, no hay que tocar el backend.
 
 interface FilaCliente { vendedor: string; cliente: string; cajas: number; cantidad: number; ars: number; mg_pct: number }
 interface FilaSku { rubro: string; c_articulo: string; d_articulo: string; oficina: string; cajas: number; mg_pct: number }
@@ -20,7 +25,6 @@ interface FilaVendedor { rubro: string; c_articulo: string; d_articulo: string; 
 
 const fmtNum = (n: number, dec = 2) =>
   n === 0 ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
-const fmtPct = (n: number) => (n === 0 ? "—" : `${(n * 100).toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`);
 
 function ultimosPeriodos(cantidad = 24): string[] {
   const hoy = new Date();
@@ -106,12 +110,11 @@ function PorCliente() {
                 <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cajas9l</th>
                 <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cantidad</th>
                 <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
-                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">% MG</th>
               </tr>
             </thead>
             <tbody>
               {grupos.length === 0 ? (
-                <tr><td colSpan={5} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
+                <tr><td colSpan={4} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
               ) : grupos.map((g) => (
                 <Fragment key={g.vendedor}>
                   {g.filas.sort((a, b) => b.ars - a.ars).map((f) => (
@@ -120,7 +123,6 @@ function PorCliente() {
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas, 4)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cantidad, 0)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(f.mg_pct)}</td>
                     </tr>
                   ))}
                   <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
@@ -128,7 +130,6 @@ function PorCliente() {
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(g.total.cajas, 4)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(g.total.cantidad, 0)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(g.total.ars)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">—</td>
                   </tr>
                 </Fragment>
               ))}
@@ -149,13 +150,13 @@ function PorSku() {
   const orden = ["MERCADO EXTERNO", "MERCADO INTERNO"];
   const oficinas = [...orden.filter((o) => oficinasSet.has(o)), ...[...oficinasSet].filter((o) => !orden.includes(o))];
 
-  const rubros = new Map<string, Map<string, { d_articulo: string; porOficina: Map<string, { cajas: number; usdMg: number; usd: number }> }>>();
+  const rubros = new Map<string, Map<string, { d_articulo: string; porOficina: Map<string, { cajas: number }> }>>();
   for (const r of rows) {
     if (!rubros.has(r.rubro)) rubros.set(r.rubro, new Map());
     const arts = rubros.get(r.rubro)!;
     const key = `${r.c_articulo}::${r.d_articulo}`;
     if (!arts.has(key)) arts.set(key, { d_articulo: r.d_articulo, porOficina: new Map() });
-    arts.get(key)!.porOficina.set(r.oficina, { cajas: r.cajas, usdMg: r.mg_pct, usd: 1 });
+    arts.get(key)!.porOficina.set(r.oficina, { cajas: r.cajas });
   }
 
   const grupos = [...rubros.entries()].map(([rubro, arts]) => {
@@ -173,7 +174,7 @@ function PorSku() {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h3 className="text-sm font-semibold text-[#1c1811]">Por SKU</h3>
-          <p className="text-[11px] text-[#847c68] mt-0.5">Cajas9l y % MG por artículo, separado por mercado externo/interno.</p>
+          <p className="text-[11px] text-[#847c68] mt-0.5">Cajas9l por artículo, separado por mercado externo/interno.</p>
         </div>
         <PeriodoSelect periodo={periodo} onChange={setPeriodo} />
       </div>
@@ -185,25 +186,16 @@ function PorSku() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-[#f7f5f0]">
-                <th rowSpan={2} className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] align-bottom">Rubro / Artículo</th>
+                <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Rubro / Artículo</th>
                 {oficinas.map((o) => (
-                  <th key={o} colSpan={2} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">{o}</th>
+                  <th key={o} className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">{o}</th>
                 ))}
-                <th colSpan={1} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">Total</th>
-              </tr>
-              <tr className="bg-[#f7f5f0]">
-                {oficinas.map((o) => (
-                  <Fragment key={o}>
-                    <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] border-l border-[#ece6d8]">Cajas9l</th>
-                    <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">% MG</th>
-                  </Fragment>
-                ))}
-                <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] border-l border-[#ece6d8]">Cajas9l</th>
+                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">Total Cajas9l</th>
               </tr>
             </thead>
             <tbody>
               {grupos.length === 0 ? (
-                <tr><td colSpan={2 + oficinas.length * 2} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
+                <tr><td colSpan={2 + oficinas.length} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
               ) : grupos.map((g) => (
                 <Fragment key={g.rubro}>
                   {g.filas.map((f) => (
@@ -212,10 +204,7 @@ function PorSku() {
                       {oficinas.map((o) => {
                         const v = f.porOficina.get(o);
                         return (
-                          <Fragment key={o}>
-                            <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{v ? fmtNum(v.cajas, 4) : "—"}</td>
-                            <td className="py-1.5 px-3 text-right tabular-nums">{v ? fmtPct(v.usdMg) : "—"}</td>
-                          </Fragment>
+                          <td key={o} className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{v ? fmtNum(v.cajas, 4) : "—"}</td>
                         );
                       })}
                       <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4] font-medium">{fmtNum(f.totalCajas, 4)}</td>
@@ -223,7 +212,7 @@ function PorSku() {
                   ))}
                   <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
                     <td className="py-1.5 px-3 text-[#1c1811]">Total {g.rubro}</td>
-                    {oficinas.map((o) => <Fragment key={o}><td className="border-l border-[#ece6d8]" /><td /></Fragment>)}
+                    {oficinas.map((o) => <td key={o} className="border-l border-[#ece6d8]" />)}
                     <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{fmtNum(g.totalRubroCajas, 4)}</td>
                   </tr>
                 </Fragment>
@@ -268,7 +257,7 @@ function PorVendedor() {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h3 className="text-sm font-semibold text-[#1c1811]">Por Vendedor</h3>
-          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad, Venta Neta (ARS) y % MG por artículo, separado por vendedor. Tabla ancha — se desplaza horizontalmente.</p>
+          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad y Venta Neta (ARS) por artículo, separado por vendedor. Tabla ancha — se desplaza horizontalmente.</p>
         </div>
         <PeriodoSelect periodo={periodo} onChange={setPeriodo} />
       </div>
@@ -282,7 +271,7 @@ function PorVendedor() {
               <tr className="bg-[#f7f5f0]">
                 <th rowSpan={2} className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] align-bottom whitespace-nowrap">Rubro / Artículo</th>
                 {vendedores.map((v) => (
-                  <th key={v} colSpan={3} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8] whitespace-nowrap">{v}</th>
+                  <th key={v} colSpan={2} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8] whitespace-nowrap">{v}</th>
                 ))}
                 <th colSpan={1} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">Total</th>
               </tr>
@@ -291,7 +280,6 @@ function PorVendedor() {
                   <Fragment key={v}>
                     <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] border-l border-[#ece6d8]">Cant.</th>
                     <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">Venta Neta</th>
-                    <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">% MG</th>
                   </Fragment>
                 ))}
                 <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] border-l border-[#ece6d8]">Venta Neta</th>
@@ -299,7 +287,7 @@ function PorVendedor() {
             </thead>
             <tbody>
               {grupos.length === 0 ? (
-                <tr><td colSpan={2 + vendedores.length * 3} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
+                <tr><td colSpan={2 + vendedores.length * 2} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
               ) : grupos.map((g) => (
                 <Fragment key={g.rubro}>
                   {g.filas.map((f) => (
@@ -311,7 +299,6 @@ function PorVendedor() {
                           <Fragment key={v}>
                             <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{val ? fmtNum(val.cantidad, 0) : "—"}</td>
                             <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.ars) : "—"}</td>
-                            <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtPct(val.mg_pct) : "—"}</td>
                           </Fragment>
                         );
                       })}
@@ -320,7 +307,7 @@ function PorVendedor() {
                   ))}
                   <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
                     <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">Total {g.rubro}</td>
-                    {vendedores.map((v) => <Fragment key={v}><td className="border-l border-[#ece6d8]" /><td /><td /></Fragment>)}
+                    {vendedores.map((v) => <Fragment key={v}><td className="border-l border-[#ece6d8]" /><td /></Fragment>)}
                     <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{fmtNum(g.totalRubroArs)}</td>
                   </tr>
                 </Fragment>
