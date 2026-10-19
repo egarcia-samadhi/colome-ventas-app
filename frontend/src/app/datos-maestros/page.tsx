@@ -318,7 +318,7 @@ function SnapLineaNegocioMapa() {
   };
 
   return (
-    <div id="snap-linea-negocio" className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
+    <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h3 className="text-sm font-semibold text-[#1c1811]">SNAP — Línea de negocio</h3>
@@ -455,13 +455,41 @@ function SnapLineaNegocioMapa() {
   );
 }
 
+const SUB_TABS = [
+  { key: "jurisdiccion", label: "Jurisdicción" },
+  { key: "snap", label: "SNAP — Línea de negocio" },
+] as const;
+
 export default function DatosMaestrosPage() {
+  // Pestañas separadas (pedido explícito 2026-10-19: "SNAP — Línea de
+  // negocio tiene que ser otra pestaña en datos maestros") -- mismo patrón
+  // que Ctrl AFIP (SUB_TABS + ?tab= para deep-linking, ej. desde el botón
+  // "Ir a clasificar" de Controles). Antes eran 2 secciones apiladas en una
+  // sola página larga.
+  const [sub, setSub] = useState<(typeof SUB_TABS)[number]["key"]>("jurisdiccion");
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab === "jurisdiccion" || tab === "snap") setSub(tab);
+  }, []);
+
   return (
     <AppShell current="/datos-maestros/" title="Datos Maestros">
-      <div className="mt-6 space-y-5">
-        <JurisdiccionMapa />
-        <SnapLineaNegocioMapa />
+      <div className="flex gap-1.5 mt-6 mb-5">
+        {SUB_TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setSub(t.key)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+              sub === t.key ? "bg-[#7D4E5B] text-white" : "bg-[#f7f5f0] text-[#1c1811] hover:bg-[#ece6d8]"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
+
+      {sub === "jurisdiccion" && <JurisdiccionMapa />}
+      {sub === "snap" && <SnapLineaNegocioMapa />}
     </AppShell>
   );
 }

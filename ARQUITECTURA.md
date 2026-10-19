@@ -210,9 +210,15 @@ clasificar, tiene que saltar en controles"): `controles.py` importa
 a la lista -- mismo patrón que `jurisdiccion_sin_clasificar` (mismo rango
 `_rango_a_chequear()`, ok=sin combos, items con centro_costo/categoria/
 canal_venta + filas afectadas). Acción correctiva: a diferencia de
-jurisdicción (que abre un modal inline en Controles), acá el link lleva
-directo a `/datos-maestros/#snap-linea-negocio` -- se agregó `id=
-"snap-linea-negocio"` al componente `SnapLineaNegocioMapa` para el ancla.
+jurisdicción (que abre un modal inline en Controles), acá el link lleva a
+`/datos-maestros/?tab=snap`.
+
+**Datos Maestros con pestañas** (pedido explícito 2026-10-19: "SNAP —
+Línea de negocio tiene que ser otra pestaña en datos maestros"): antes
+eran 2 secciones (`JurisdiccionMapa`+`SnapLineaNegocioMapa`) apiladas en
+una sola página larga; ahora son sub-pestañas "Jurisdicción"/"SNAP — Línea
+de negocio", mismo patrón `SUB_TABS`+`?tab=` que Ctrl AFIP (deep-linking
+desde Controles).
 
 ## Deploy
 
