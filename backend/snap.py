@@ -103,6 +103,12 @@ def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
                 continue
             if it.get("d_grupo") != "VINOS **":
                 continue
+            if it.get("d_rubro") == "FDELMOTTE **":
+                # FdelMotte existe en ig_ventas pero el Excel/SNAP real de la
+                # empresa no la tiene -- se separa del consolidado, mismo
+                # criterio ya confirmado con Ariel Culasso 2026-10-09 para
+                # Panel de Ventas (ver proyecto_colome_fdelmotte_separada).
+                continue
             signo = -1.0 if it.get("d_tipo_compro") == "NOTA CREDITO VENTA" else 1.0
             categoria = it.get("d_categoria") or ""
             if categoria in DOMESTIC_WHOLESALE:
@@ -113,9 +119,21 @@ def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
                 linea = _clasificar_dtc(it, reglas)
             else:
                 linea = "Otro"  # categoria fuera de las 6 conocidas -- no debería pasar
-            usd = signo * float(it.get("valor_venta_mon_alt") or 0)
+            usd_linea = float(it.get("valor_venta_mon_alt") or 0)
+            usd = signo * usd_linea
             cajas = signo * float(it.get("cantidad_cajas9l") or 0)
-            costo_usd = signo * float(it.get("costo_unit_mon_alt") or 0) * float(it.get("cantidad") or 0)
+            costo_linea = float(it.get("costo_unit_mon_alt") or 0) * float(it.get("cantidad") or 0)
+            # Guarda contra costo_unit_mon_alt corrupto en el origen (ej.
+            # "AMALAYA BLANCO DULCE" vendida por VENTA AL PERSONAL en
+            # agosto-2026: costo unitario de ~USD 1.87M contra un precio de
+            # venta de ~USD 2.70 -- rompía el %MG a valores sin sentido como
+            # -19753%). Si el costo de una línea supera 10x su propio
+            # ingreso, se descarta ESE costo puntual (no el ingreso) hasta
+            # que Ariel/Redline confirme el dato real -- pedido explícito de
+            # Ezequiel 2026-10-19.
+            if usd_linea and costo_linea > usd_linea * 10:
+                costo_linea = 0.0
+            costo_usd = signo * costo_linea
             a = acc.setdefault(linea, [0.0, 0.0, 0.0])
             a[0] += usd
             a[1] += cajas
