@@ -40,21 +40,17 @@ function renderSbl(rows) {
       <th class="grp" colspan="3">Sales Value (USD 000s)</th>
       <th></th>
       <th class="grp" colspan="3">9 Litre Equivalent</th>
-      <th></th>
-      <th class="grp" colspan="1">GM %</th>
     </tr>
     <tr>
       <th>Línea de negocio</th>
       <th>Actual</th><th>Last Year</th><th>% vs LY</th>
       <th></th>
       <th>Actual</th><th>Last Year</th><th>% vs LY</th>
-      <th></th>
-      <th>Act</th>
     </tr>
   </thead><tbody>`;
 
   rows.forEach(r => {
-    if (r === null) { html += `<tr class="spacer"><td colspan="10"></td></tr>`; return; }
+    if (r === null) { html += `<tr class="spacer"><td colspan="8"></td></tr>`; return; }
     const isTotal = SBL_TOTAL_ROWS.has(r.label);
     html += `<tr class="${isTotal ? 'total' : ''}">`;
     html += td(r.label, 'label');
@@ -65,8 +61,6 @@ function renderSbl(rows) {
     html += td(fmtNum(r.lit_act));
     html += td(fmtNum(r.lit_ly));
     html += td(fmtPct(r.lit_vs_ly), pctClass(r.lit_vs_ly));
-    html += `<td></td>`;
-    html += td(fmtPct(r.gm_act));
     html += `</tr>`;
   });
 
@@ -94,7 +88,6 @@ function renderStats(period) {
   let html = '';
   html += statTile('Total Sales (USD 000s)', '$' + fmtUsd(total.usd_act), total.usd_vs_ly, 'vs LY');
   html += statTile('9L Equivalent (cajas)', fmtNum(total.lit_act), total.lit_vs_ly, 'vs LY');
-  html += statTile('GM % Actual', fmtPct(total.gm_act), null, '');
   html += statTile('Doméstico (USD 000s)', '$' + fmtUsd(domestic.usd_act), domestic.usd_vs_ly, 'vs LY');
   html += statTile('Export (USD 000s)', '$' + fmtUsd(exportRow.usd_act), exportRow.usd_vs_ly, 'vs LY');
   document.getElementById('statRow').innerHTML = html;

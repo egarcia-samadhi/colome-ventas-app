@@ -272,6 +272,14 @@ formulario de alta ya precargado -- mismo resultado que
 `precargarDesdeCombo()` (usado también desde la propia pestaña de Datos
 Maestros), pero disparado por URL en vez de un click local.
 
+**Columna/stat tile "GM %" sacados de Sales by Line of Business** (pedido
+explícito 2026-10-19): `renderSbl()` en `snap.js` ya no pinta la columna
+"GM %" (quedaba el grupo de 1 columna "Act"), el stat tile "GM % Actual"
+(para TOTAL SALES mezclaba líneas con y sin costeo, siempre daba N/A de
+todos modos) y la mención en "Cómo leer" del sidebar. El backend
+(`snap.py` `_fila()`/`gm_act`) sigue calculando el dato -- no se tocó,
+solo se dejó de mostrar.
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com
