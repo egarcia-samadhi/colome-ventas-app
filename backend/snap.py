@@ -11,20 +11,32 @@ el 2026-10-19, no inventada -- confirmado con Ezequiel):
   Total Grupo Colome Brand = Grupo Colome Domestic + Grupo Colome Export
   Direct-to-consumer Channel = Employees + E-commerce + Colome Hotel +
                                 Colome Visitor Center + Cafayate Visitor
-                                Center + Otro DTC/Hospitalidad
+                                Center
   TOTAL SALES TO THIRD PARTIES = Total Grupo Colome Brand
                                   + Direct-to-consumer Channel
                                   + Total Buyers Own Brand (BOB)
+                                  + Sin clasificar
   TOTAL SALES = TOTAL SALES TO THIRD PARTIES + Total Intercompany Sales
 
 Partición POR `d_categoria` (universo VINOS **, 6 valores reales posibles,
 confirmado 2026-10-09): DBA/DCBA/DNOA -> Grupo Colome Domestic (wholesale),
 EXPORTS -> Grupo Colome Export, DTC/HOSPITALIDAD -> Direct-to-consumer
-Channel (sub-clasificado por `snap_linea_negocio_mapa`, ver database.py).
-Ningún valor de categoria queda sin cubrir -- las combinaciones DTC/
-HOSPITALIDAD que no matchean ninguna regla de Datos Maestros caen en "Otro
-DTC/Hospitalidad" (se siguen sumando al total, solo no tienen nombre propio
-todavía -- el admin agrega la regla faltante desde Datos Maestros).
+Channel (sub-clasificado por `snap_linea_negocio_mapa`, editable desde
+Datos Maestros -- ver database.py/datos_maestros.py).
+
+**"Sin clasificar" (fila propia, SIEMPRE visible, 2026-10-19 -- pedido
+explícito de Ezequiel: "tiene que ir a una línea sin clasificar, PERO
+SIEMPRE TIENE QUE MOSTRAR EL TOTAL"):** ningún peso se pierde ni se
+esconde. Dos casos cuentan ahí: 1) combinaciones centro_costo/categoria/
+canal_venta dentro de DTC/HOSPITALIDAD que no matchean ninguna regla de
+`snap_linea_negocio_mapa` (el admin agrega la regla faltante desde Datos
+Maestros, endpoint `/api/datos-maestros/snap-linea-negocio/sin-clasificar`
+lista las combinaciones pendientes); 2) valor de `d_categoria` fuera de
+los 6 conocidos (no debería pasar nunca, pero antes de esta fila cualquier
+línea así se perdía en silencio de TODOS los totales -- bug real
+corregido acá). "Sin clasificar" entra en `TOTAL SALES TO THIRD PARTIES`
+como hermano de Brand/DTC/BOB, no anidado dentro de Direct-to-consumer
+Channel (el caso 2 no es necesariamente DTC).
 
 BOB (Others) e Intercompany (GC Wines Uruguay S.A.) quedan en 0 FIJO --
 investigado 2026-10-19: no hay ninguna venta real bajo la marca "Ascension"
@@ -86,7 +98,7 @@ def _clasificar_dtc(it: dict, reglas: list[dict]) -> str:
         if r["canal_venta"] and it.get("d_canal_venta") != r["canal_venta"]:
             continue
         return r["linea_negocio"]
-    return "Otro DTC/Hospitalidad"
+    return "Sin clasificar"
 
 
 def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
@@ -120,7 +132,11 @@ def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
             elif categoria in DTC_HOSPITALIDAD:
                 linea = _clasificar_dtc(it, reglas)
             else:
-                linea = "Otro"  # categoria fuera de las 6 conocidas -- no debería pasar
+                # categoria fuera de las 6 conocidas -- no debería pasar nunca,
+                # pero antes de la fila "Sin clasificar" (2026-10-19) esto se
+                # perdía en silencio de TODOS los totales (bug real: el bucket
+                # "Otro" se acumulaba pero ninguna fila lo leía).
+                linea = "Sin clasificar"
             usd_linea = float(it.get("valor_venta_mon_alt") or 0)
             usd = signo * usd_linea
             cajas = signo * float(it.get("cantidad_cajas9l") or 0)
@@ -228,35 +244,45 @@ def ventas_sbl(desde: date, hasta_incl: date) -> list[dict | None]:
     brand_total = _sumar("Total Grupo Colome Brand", [domestic, export_])
 
     dtc_fijas = [_fila(l, agg, ly) for l in DTC_LINEAS_FIJAS]
-    otro_dtc = _fila("Otro DTC/Hospitalidad", agg, ly)
-    dtc_channel = _sumar("Direct-to-consumer Channel", dtc_fijas + [otro_dtc])
+    dtc_channel = _sumar("Direct-to-consumer Channel", dtc_fijas)
+
+    # "Sin clasificar" (2026-10-19, pedido explícito de Ezequiel) -- SIEMPRE
+    # se muestra, incluso en 0, para que quede claro que no hay plata
+    # escondida. Hermano de Brand/DTC/BOB en TOTAL SALES TO THIRD PARTIES,
+    # no anidado dentro de Direct-to-consumer Channel (puede venir de DTC/
+    # HOSPITALIDAD sin regla matcheada O de una categoria completamente
+    # fuera de las 6 conocidas -- ver _agregado_sbl).
+    sin_clasificar = _fila("Sin clasificar", agg, ly)
 
     bob_rows = [_cero(l) for l in ("Others",)]
     bob_total = _sumar("Total Buyers Own Brand (BOB)", bob_rows)
 
-    tercero_total = _sumar("TOTAL SALES TO THIRD PARTIES", [brand_total, dtc_channel, bob_total])
+    tercero_total = _sumar("TOTAL SALES TO THIRD PARTIES", [brand_total, dtc_channel, bob_total, sin_clasificar])
 
     uy = _cero("GC Wines Uruguay S.A.")
     intercompany_total = _sumar("Total Intercompany Sales", [uy])
 
     total = _sumar("TOTAL SALES", [tercero_total, intercompany_total])
 
-    # Filas mostradas = exactamente las filas NO ocultas en el SNAP real de
-    # Ariel (SNAP I September 2026 - NM - VSP 2.xls, hoja "Sales by line of
-    # bussines", confirmado con xlrd leyendo el flag `hidden` de cada fila
-    # -- Ezequiel sospechó que estaba viendo filas ocultas del Excel, y así
-    # era). Ocultas ahí (y acá): "Grupo Colome Domestic - AirLines" (dato
-    # informativo, sigue sumado DENTRO de Domestic), todo "Total Buyers Own
-    # Brand (BOB)" (Ascension */Others/subtotal -- 0 fijo, ver
-    # investigación arriba) y todo "Total Intercompany Sales" (GC Wines
-    # Uruguay S.A. -- también 0 fijo). `airlines`, `bob_rows`/`bob_total` y
+    # Filas mostradas = las filas NO ocultas en el SNAP real de Ariel (SNAP
+    # I September 2026 - NM - VSP 2.xls, hoja "Sales by line of bussines",
+    # confirmado con xlrd leyendo el flag `hidden` de cada fila -- Ezequiel
+    # sospechó que estaba viendo filas ocultas del Excel, y así era) MÁS la
+    # fila "Sin clasificar" (que el SNAP real no tiene porque ya viene
+    # depurado a mano -- acá sí puede haber datos sin mapear, y pedido
+    # explícito es que nunca se escondan). Ocultas del SNAP real: "Grupo
+    # Colome Domestic - AirLines" (informativo, sigue sumado DENTRO de
+    # Domestic), todo "Total Buyers Own Brand (BOB)" (Ascension */Others/
+    # subtotal -- 0 fijo) y todo "Total Intercompany Sales" (GC Wines
+    # Uruguay S.A. -- 0 fijo) -- `bob_rows`/`bob_total` y
     # `uy`/`intercompany_total` se siguen calculando (entran en
-    # `tercero_total`/`total` igual que en el SNAP real), solo no se
-    # exponen como fila propia.
+    # `tercero_total`/`total`), solo no se exponen como fila propia.
     return [
         domestic, export_, brand_total,
         None,
         *dtc_fijas, dtc_channel,
+        None,
+        sin_clasificar,
         None,
         tercero_total,
         None,
@@ -266,7 +292,7 @@ def ventas_sbl(desde: date, hasta_incl: date) -> list[dict | None]:
 
 def combos_sin_clasificar(desde: date, hasta_incl: date) -> list[dict]:
     """Combinaciones centro_costo/categoria/canal_venta (dentro de DTC/
-    HOSPITALIDAD) que cayeron en "Otro DTC/Hospitalidad" -- para que Datos
+    HOSPITALIDAD) que cayeron en "Sin clasificar" -- para que Datos
     Maestros pueda mostrarlas y el admin agregue la regla que falta."""
     reglas = _mapa_linea_negocio()
     conteo: dict[tuple, int] = {}
@@ -285,7 +311,7 @@ def combos_sin_clasificar(desde: date, hasta_incl: date) -> list[dict]:
             categoria = it.get("d_categoria") or ""
             if categoria not in DTC_HOSPITALIDAD:
                 continue
-            if _clasificar_dtc(it, reglas) != "Otro DTC/Hospitalidad":
+            if _clasificar_dtc(it, reglas) != "Sin clasificar":
                 continue
             k = (it.get("d_centro_costo") or "", categoria, it.get("d_canal_venta") or "")
             conteo[k] = conteo.get(k, 0) + 1

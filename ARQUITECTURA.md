@@ -185,6 +185,24 @@ endpoint, default al último mes cerrado si no se pasa o no está en la
 lista de disponibles) y reemplaza `RAW` completo en memoria -- no hace
 falta recargar la página.
 
+**Fila "Sin clasificar" SIEMPRE visible** (pedido explícito 2026-10-19:
+"tiene que ir a una línea sin clasificar, PERO SIEMPRE TIENE QUE MOSTRAR
+EL TOTAL. LA CLASIFICACION Y CRITERIO TIENE QUE ESTAR DE MANERA EDITABLE
+EN DATOS MAESTROS"): reemplaza el bucket silencioso "Otro
+DTC/Hospitalidad" -- ahora es una fila propia en `ventas_sbl()`,
+HERMANA de Brand/DTC Channel/BOB dentro de `TOTAL SALES TO THIRD
+PARTIES` (no anidada en Direct-to-consumer Channel), siempre presente
+aunque esté en 0. De paso corrige un bug real: un `d_categoria` fuera de
+las 6 conocidas caía a un bucket "Otro" que ningún `_fila()` leía, esa
+plata se perdía en silencio de TODOS los totales. Ahora cae en el mismo
+"Sin clasificar". El criterio de clasificación YA era 100% editable
+desde Datos Maestros antes de este pedido (CRUD completo en
+`datos_maestros.py` sobre `snap_linea_negocio_mapa`, UI en
+`datos-maestros/page.tsx` componente `SnapLineaNegocioMapa`, con el
+endpoint `/api/datos-maestros/snap-linea-negocio/sin-clasificar` listando
+las combinaciones pendientes) -- se confirmó que seguía funcionando, no
+hizo falta tocar nada ahí.
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com
