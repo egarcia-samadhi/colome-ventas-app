@@ -60,6 +60,12 @@ CAMPOS_USADOS = (
     "d_oficina", "d_categoria", "d_canal_venta", "d_zona_comercial",
     "d_pais", "d_rubro", "d_marca", "n_cliente", "cantidad_cajas9l",
     "costo_unit_mon_alt", "cantidad", "d_grupo",
+    # agregados 2026-10-19 para Otros Análisis -> Por Cliente/SKU/Vendedor
+    # (replica de Operaciones_de_Ventas.xlsx). Un día YA CACHEADO antes de
+    # este cambio no tiene estas claves (vuelven None) -- si se nota algún
+    # Cód./Vendedor vacío en un mes cerrado viejo, purgar CACHE_DIR en el VPS
+    # para forzar la rebajada con el campo nuevo (ver docstring del módulo).
+    "c_articulo", "n_vendedor",
 )
 
 
@@ -470,4 +476,123 @@ def desglose_por_grupo(desde: date, hasta_incl: date) -> list[dict]:
         for (p, g), v in acc.items()
     ]
     out.sort(key=lambda r: (r["periodo"], r["grupo"]))
+    return out
+
+
+def _lineas_vinos(desde: date, hasta_incl: date):
+    """Generador de líneas filtradas a TIPOS_VALIDOS + GRUPO_VALIDO ("VINOS
+    **", mismo universo de "Ventas" que Panel de Ventas), con el signo a
+    aplicar a sus magnitudes (-1 en notas de crédito, que revierten la venta
+    completa -- cantidad, cajas, importe Y costo, mismo criterio que
+    neto_por_jurisdiccion/desglose_por_grupo para ARS/USD, extendido acá a
+    cantidad/costo para que %MG y los totales de Por Cliente/SKU/Vendedor
+    queden coherentes). Pensado para un rango de UN SOLO MES (como
+    jurisdiccion.py): no usa el cache de agregado-cerrado de
+    facts_panel_ventas/desglose_por_grupo porque el costo de recalcular un
+    mes solo (días por mes, no ~400 días de historial) ya es bajo."""
+    vistos_global = set()
+    dia = desde
+    while dia <= hasta_incl:
+        for it in _fetch_dia(dia):
+            key = (it.get("id"), it.get("det_id"))
+            if key in vistos_global:
+                continue
+            vistos_global.add(key)
+            if it.get("d_tipo_compro") not in TIPOS_VALIDOS:
+                continue
+            if it.get("d_grupo") != GRUPO_VALIDO:
+                continue
+            signo = -1.0 if it.get("d_tipo_compro") == "NOTA CREDITO VENTA" else 1.0
+            yield it, signo
+        dia += timedelta(days=1)
+
+
+def ventas_por_cliente(desde: date, hasta_incl: date) -> list[dict]:
+    """Otros Análisis -> Por Cliente (replica de Operaciones_de_Ventas.xlsx,
+    hoja "Por Cliente"). Filas planas Vendedor/Cliente -- el frontend agrupa
+    y sub-totaliza por vendedor. Sin "% Desc C" (pedido explícito de
+    Ezequiel 2026-10-19: se omite, no hay un campo 1 a 1 en ig_ventas y no
+    vale la pena estimarlo sin validar la fórmula con Ariel)."""
+    acc: dict[tuple[str, str], list[float]] = {}
+    for it, signo in _lineas_vinos(desde, hasta_incl):
+        vendedor = it.get("n_vendedor") or "Sin vendedor"
+        cliente = it.get("n_cliente") or "Sin cliente"
+        a = acc.setdefault((vendedor, cliente), [0.0, 0.0, 0.0, 0.0, 0.0])
+        cantidad = float(it.get("cantidad") or 0)
+        a[0] += signo * float(it.get("cantidad_cajas9l") or 0)
+        a[1] += signo * cantidad
+        a[2] += signo * float(it.get("valor_mon_loc") or 0)
+        a[3] += signo * float(it.get("valor_venta_mon_alt") or 0)
+        a[4] += signo * float(it.get("costo_unit_mon_alt") or 0) * cantidad
+    out = []
+    for (vendedor, cliente), (cajas, cantidad, ars, usd, costo_usd) in acc.items():
+        mg_pct = (usd - costo_usd) / usd if usd else 0.0
+        out.append({
+            "vendedor": vendedor, "cliente": cliente,
+            "cajas": round(cajas, 4), "cantidad": round(cantidad, 2),
+            "ars": round(ars, 2), "mg_pct": round(mg_pct, 6),
+        })
+    out.sort(key=lambda r: (r["vendedor"], -r["ars"]))
+    return out
+
+
+def ventas_por_sku(desde: date, hasta_incl: date) -> list[dict]:
+    """Otros Análisis -> Por SKU (replica de Operaciones_de_Ventas.xlsx,
+    hoja "Por SKU"): filas Rubro/Artículo, columna pivot = D Oficina
+    (MERCADO EXTERNO/INTERNO), métricas Cajas9l y %MG -- igual que el Excel
+    original, sin Cantidad/Venta Neta/%Desc C en esta hoja. Filas planas, el
+    frontend pivotea oficina a columna y sub-totaliza por rubro."""
+    acc: dict[tuple[str, str, str, str], list[float]] = {}
+    for it, signo in _lineas_vinos(desde, hasta_incl):
+        k = (
+            it.get("d_rubro") or "Sin rubro",
+            it.get("c_articulo") or "",
+            it.get("d_articulo") or "Sin artículo",
+            it.get("d_oficina") or "Sin oficina",
+        )
+        a = acc.setdefault(k, [0.0, 0.0, 0.0])
+        cantidad = float(it.get("cantidad") or 0)
+        a[0] += signo * float(it.get("cantidad_cajas9l") or 0)
+        a[1] += signo * float(it.get("valor_venta_mon_alt") or 0)
+        a[2] += signo * float(it.get("costo_unit_mon_alt") or 0) * cantidad
+    out = []
+    for (rubro, c_articulo, d_articulo, oficina), (cajas, usd, costo_usd) in acc.items():
+        mg_pct = (usd - costo_usd) / usd if usd else 0.0
+        out.append({
+            "rubro": rubro, "c_articulo": c_articulo, "d_articulo": d_articulo,
+            "oficina": oficina, "cajas": round(cajas, 4), "mg_pct": round(mg_pct, 6),
+        })
+    out.sort(key=lambda r: (r["rubro"], r["d_articulo"], r["oficina"]))
+    return out
+
+
+def ventas_por_vendedor(desde: date, hasta_incl: date) -> list[dict]:
+    """Otros Análisis -> Por Vendedor (replica de Operaciones_de_Ventas.xlsx,
+    hoja "Por vendedor"): filas Rubro/Artículo, columna pivot = Vendedor,
+    métricas Cantidad, Venta Neta (ARS) y %MG -- sin Cajas9l/%Desc C en esta
+    hoja, igual que el Excel original. Filas planas, el frontend pivotea
+    vendedor a columna y sub-totaliza por rubro."""
+    acc: dict[tuple[str, str, str, str], list[float]] = {}
+    for it, signo in _lineas_vinos(desde, hasta_incl):
+        k = (
+            it.get("d_rubro") or "Sin rubro",
+            it.get("c_articulo") or "",
+            it.get("d_articulo") or "Sin artículo",
+            it.get("n_vendedor") or "Sin vendedor",
+        )
+        a = acc.setdefault(k, [0.0, 0.0, 0.0, 0.0])
+        cantidad = float(it.get("cantidad") or 0)
+        a[0] += signo * cantidad
+        a[1] += signo * float(it.get("valor_mon_loc") or 0)
+        a[2] += signo * float(it.get("valor_venta_mon_alt") or 0)
+        a[3] += signo * float(it.get("costo_unit_mon_alt") or 0) * cantidad
+    out = []
+    for (rubro, c_articulo, d_articulo, vendedor), (cantidad, ars, usd, costo_usd) in acc.items():
+        mg_pct = (usd - costo_usd) / usd if usd else 0.0
+        out.append({
+            "rubro": rubro, "c_articulo": c_articulo, "d_articulo": d_articulo,
+            "vendedor": vendedor, "cantidad": round(cantidad, 2), "ars": round(ars, 2),
+            "mg_pct": round(mg_pct, 6),
+        })
+    out.sort(key=lambda r: (r["rubro"], r["d_articulo"], r["vendedor"]))
     return out
