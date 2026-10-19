@@ -25,9 +25,10 @@ import { AppShell } from "@/components/AppShell";
 // conectado en vivo a `/api/ventas/snap` (backend/snap.py), reemplazando
 // `sbl_aug`/`sbl_ytd` de `colome-data.json` (claves renombradas a
 // `sbl_mes`/`sbl_ytd`, sin Budget/Forecast -- ver snap.py). `sbm` (Sales by
-// Market) sigue viniendo del JSON estático -- 54 filas con mapeo de ~40
-// países, deferred a una sesión futura. `fetchSnap()` mergea ambas fuentes
-// en un solo objeto con la forma que espera `snap.js`.
+// Market, 54 filas mock con mapeo de ~40 países que nunca se conectó)
+// se sacó de la hoja (pedido explícito de Ezequiel) -- ya no hace falta
+// `colome-data.json` para nada, `fetchSnap()` devuelve el JSON de
+// `/api/ventas/snap` tal cual.
 //
 // 2026-10-08 (mismo día, corrección urgente) -- Ezequiel: "entre y sales
 // performance tarda muchísimo!". Causa: `/api/ventas/panel` ahora calcula en
@@ -87,16 +88,10 @@ export default function VentasPage() {
       document.body.appendChild(snapScript);
     };
 
-    // Mergea sbl_mes/sbl_ytd en vivo (/api/ventas/snap) con sbm estático
-    // (colome-data.json, Sales by Market -- sin conectar todavía) en un
-    // solo objeto con la forma que lee snap.js.
-    const fetchSnap = () => Promise.all([
-      fetch("/ventas/colome-data.json").then((r) => r.json()),
-      fetch("/api/ventas/snap").then((r) => {
-        if (r.status === 401) { window.location.href = "/"; return null; }
-        return r.json();
-      }),
-    ]).then(([estatico, vivo]) => JSON.stringify({ ...vivo, sbm: estatico.sbm }));
+    const fetchSnap = () => fetch("/api/ventas/snap").then((r) => {
+      if (r.status === 401) { window.location.href = "/"; return "{}"; }
+      return r.text();
+    });
 
     const inyectarPanel = (factsJson: string, appJs: string) => {
       const factsScript = document.createElement("script");

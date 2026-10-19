@@ -33,11 +33,11 @@ backend/
   otros_analisis.py             -- endpoints de Otros Análisis (ver abajo)
   snap.py                         -- SNAP -> Sales by Line of Business EN VIVO
                                       (ver detalle abajo); Sales by Market
-                                      sigue siendo mock estático
+                                      se sacó de la hoja (pedido Ezequiel 2026-10-19)
 frontend/
   src/app/
     page.tsx                -- Ventas (mock portado: Panel/Región/SNAP por hash;
-                                SNAP mergea /api/ventas/snap en vivo + sbm mock)
+                                SNAP consume /api/ventas/snap en vivo directo)
     ctrl-afip/page.tsx        -- Cruce AFIP / Info AFIP / Ventas por Jurisdicción
     controles/page.tsx          -- Panel de Controles
     otros-analisis/page.tsx       -- Por Cliente / Por SKU / Por Vendedor (ver abajo)
@@ -141,8 +141,11 @@ escondidos):
    `gm_act="N/A"` explícito (parámetro `sin_costeo=True` en `_fila()`) para
    Domestic/Export/AirLines, no se inventa ni se oculta el hallazgo.
 
-**Pendiente**: Sales by Market (54 filas, ~40 países con subtotales por
-región) sigue siendo mock estático, deliberadamente fuera de esta sesión.
+**Sales by Market** (54 filas, ~40 países con subtotales por región, mock
+estático que nunca se conectó): sacado de la hoja Sales Performance a
+pedido explícito de Ezequiel (2026-10-19) en vez de conectarlo en vivo --
+sección eliminada de `content.html`/`snap.js`/`sidebar.html`, `fetchSnap()`
+ya no depende de `colome-data.json`.
 
 ## Deploy
 

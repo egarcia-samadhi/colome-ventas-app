@@ -78,62 +78,6 @@ function renderSbl(rows) {
   return html;
 }
 
-// ---------- Sales by Market (todavía mock estático -- Sales by Line of
-// Business ya está en vivo, Market queda para una sesión futura) ----------
-const SBM_TOTAL_ROWS = new Set(['Total Domestic', 'Total Caribbean', 'Total Latin America', 'Europe', 'Total Export', 'Total Branded Wine', 'Total Buyers Own Brand', 'TOTAL ', 'TOTAL']);
-const SBM_GROUP_HEADERS = new Set(['Domestic', 'Export', 'Buyers Own Brand']);
-
-function renderSbm(rows) {
-  let html = `<table><thead>
-    <tr class="grp">
-      <th></th>
-      <th class="grp" colspan="3">Sales Value (USD 000s)</th>
-      <th></th>
-      <th class="grp" colspan="3">9 Litre Equivalent</th>
-      <th></th>
-      <th class="grp" colspan="2">GM %</th>
-    </tr>
-    <tr>
-      <th>Mercado</th>
-      <th>Actual</th><th>Budget</th><th>Last Year</th>
-      <th></th>
-      <th>Actual</th><th>Budget</th><th>Last Year</th>
-      <th></th>
-      <th>Act</th><th>Bud</th>
-    </tr>
-  </thead><tbody>`;
-
-  rows.forEach(r => {
-    if (r === null) { html += `<tr class="spacer"><td colspan="11"></td></tr>`; return; }
-    const label = r.label.trim();
-    const isTotal = SBM_TOTAL_ROWS.has(r.label) || SBM_TOTAL_ROWS.has(label);
-    const isGroupHeader = SBM_GROUP_HEADERS.has(label) && r.usd_act === null;
-    html += `<tr class="${isTotal ? 'total' : ''} ${isGroupHeader ? 'group-header' : ''}">`;
-    html += td(r.label, 'label');
-    if (isGroupHeader) {
-      html += `<td colspan="10"></td></tr>`;
-      return;
-    }
-    html += td(fmtUsd(r.usd_act));
-    html += td(fmtUsd(r.usd_bud));
-    html += td(fmtUsd(r.usd_ly));
-    html += `<td></td>`;
-    html += td(fmtNum(r.lit_act));
-    html += td(fmtNum(r.lit_bud));
-    html += td(fmtNum(r.lit_ly));
-    html += `<td></td>`;
-    html += td(fmtPct(r.gm_act));
-    html += td(fmtPct(r.gm_bud));
-    html += `</tr>`;
-  });
-
-  html += `</tbody></table>
-  <div class="legend-inline">
-    <span class="mock-b">Sales by Market: todavía mock, pendiente conectar</span>
-  </div>`;
-  return html;
-}
-
 // ---------- Stat tiles ----------
 function statTile(label, value, delta, deltaLabel) {
   const cls = delta === null || delta === 'N/A' ? '' : (delta >= 0 ? 'up' : 'down');
@@ -159,7 +103,6 @@ function renderStats(period) {
 function render(period) {
   renderStats(period);
   document.getElementById('sblTable').innerHTML = renderSbl(period === 'mes' ? RAW.sbl_mes : RAW.sbl_ytd);
-  document.getElementById('sbmTable').innerHTML = renderSbm(RAW.sbm);
 }
 
 // Labels del toggle de período (Mes cerrado actual / YTD del ejercicio
