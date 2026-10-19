@@ -2,10 +2,13 @@
 en chakana-ventas necesito que en la hoja de controles se informe, si el
 control de afip no da, y si hay jurisdicciones sin clasificar". Mismo patrón
 que `Proviva - Ventas Chakana/backend/app/controles.py` (ver ahí la versión
-completa con 8 controles) pero acotado a los 2 únicos chequeos que hoy
-aplican a Colomé -- el resto de los controles de Chakana (Litros, Canal,
-Productos, Países, Salidas de Inventario) dependen de tablas de Datos
-Maestros que Colomé todavía no tiene.
+completa con 8 controles) -- acotado originalmente a los 2 únicos chequeos
+que aplicaban a Colomé, sumado un 3er control 2026-10-19 ("si hay una línea
+sin clasificar, tiene que saltar en controles") cuando Sales by Line of
+Business pasó a tener su propia fila "Sin clasificar". El resto de los
+controles de Chakana (Litros, Canal, Productos, Países, Salidas de
+Inventario) siguen sin aplicar -- dependen de tablas de Datos Maestros que
+Colomé todavía no tiene.
 """
 from datetime import date, timedelta
 
@@ -15,6 +18,7 @@ from afip import calcular_cruce
 from database import get_db
 from ig_ventas import neto_por_jurisdiccion
 from jurisdiccion import _mapa_jurisdiccion
+from snap import combos_sin_clasificar
 
 router = APIRouter(prefix="/api/controles", tags=["controles"])
 
@@ -76,6 +80,14 @@ async def controles(admin=Depends(require_admin)):
         if r["jurisdiccion"] not in mapa:
             sin_clasificar[r["jurisdiccion"]] = sin_clasificar.get(r["jurisdiccion"], 0) + r.get("filas", 0)
 
+    # Control 3: Sales by Line of Business -- combinaciones centro_costo/
+    # categoria/canal_venta (dentro de DTC/HOSPITALIDAD) que caen en la fila
+    # "Sin clasificar" del Sales Performance (ver snap.py) por no matchear
+    # ninguna regla de Datos Maestros → SNAP Línea de negocio. Pedido
+    # explícito de Ezequiel 2026-10-19: "si hay una línea sin clasificar,
+    # tiene que saltar en controles" (mismo patrón que jurisdicciones).
+    combos_sbl = combos_sin_clasificar(desde, hasta_incl)
+
     controles_lista = [
         {
             "id": "cruce_afip",
@@ -100,6 +112,17 @@ async def controles(admin=Depends(require_admin)):
             "items": [
                 {"valor": v, "filas": c}
                 for v, c in sorted(sin_clasificar.items(), key=lambda x: -x[1])[:15]
+            ],
+        },
+        {
+            "id": "sbl_sin_clasificar",
+            "label": "Sales by Line of Business: combinaciones sin clasificar",
+            "descripcion": f"Busca combinaciones Centro de Costo/Categoría/Canal de Venta dentro de DTC/HOSPITALIDAD ({desde.isoformat()} a {hasta_incl.isoformat()}) que no matchean ninguna regla de Datos Maestros → SNAP Línea de negocio -- esas ventas caen en la fila \"Sin clasificar\" de Sales by Line of Business (hoja Sales Performance) en vez de en su línea real.",
+            "ok": not combos_sbl,
+            "cantidad": len(combos_sbl),
+            "items": [
+                {"valor": f'{c["centro_costo"] or "(vacío)"} / {c["categoria"]} / {c["canal_venta"] or "(vacío)"}', "filas": c["filas"]}
+                for c in combos_sbl[:15]
             ],
         },
     ]

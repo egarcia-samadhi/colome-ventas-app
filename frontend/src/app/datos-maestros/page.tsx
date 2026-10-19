@@ -318,7 +318,7 @@ function SnapLineaNegocioMapa() {
   };
 
   return (
-    <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
+    <div id="snap-linea-negocio" className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h3 className="text-sm font-semibold text-[#1c1811]">SNAP — Línea de negocio</h3>

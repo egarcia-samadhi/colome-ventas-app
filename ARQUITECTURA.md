@@ -203,6 +203,17 @@ endpoint `/api/datos-maestros/snap-linea-negocio/sin-clasificar` listando
 las combinaciones pendientes) -- se confirmó que seguía funcionando, no
 hizo falta tocar nada ahí.
 
+**3er control en Panel de Controles: Sales by Line of Business sin
+clasificar** (pedido explícito 2026-10-19: "si hay una línea sin
+clasificar, tiene que saltar en controles"): `controles.py` importa
+`combos_sin_clasificar` de `snap.py` y agrega el control `sbl_sin_clasificar`
+a la lista -- mismo patrón que `jurisdiccion_sin_clasificar` (mismo rango
+`_rango_a_chequear()`, ok=sin combos, items con centro_costo/categoria/
+canal_venta + filas afectadas). Acción correctiva: a diferencia de
+jurisdicción (que abre un modal inline en Controles), acá el link lleva
+directo a `/datos-maestros/#snap-linea-negocio` -- se agregó `id=
+"snap-linea-negocio"` al componente `SnapLineaNegocioMapa` para el ancla.
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com

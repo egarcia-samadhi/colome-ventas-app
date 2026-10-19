@@ -172,6 +172,15 @@ export default function ControlesPage() {
                       </a>
                     )}
 
+                    {c.id === "sbl_sin_clasificar" && !c.ok && (
+                      <a
+                        href="/datos-maestros/#snap-linea-negocio"
+                        className="inline-block text-[11px] text-[#7D4E5B] hover:text-[#9F6375] underline mb-3"
+                      >
+                        Ir a clasificar en Datos Maestros →
+                      </a>
+                    )}
+
                     {c.items && c.items.length > 0 && (
                       <table className="w-full text-[12px]">
                         <thead>
