@@ -123,7 +123,6 @@ def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
                 # criterio ya confirmado con Ariel Culasso 2026-10-09 para
                 # Panel de Ventas (ver proyecto_colome_fdelmotte_separada).
                 continue
-            signo = -1.0 if it.get("d_tipo_compro") == "NOTA CREDITO VENTA" else 1.0
             categoria = it.get("d_categoria") or ""
             if categoria in DOMESTIC_WHOLESALE:
                 linea = "Grupo Colome Domestic"
@@ -137,9 +136,21 @@ def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
                 # perdía en silencio de TODOS los totales (bug real: el bucket
                 # "Otro" se acumulaba pero ninguna fila lo leía).
                 linea = "Sin clasificar"
+            # BUG REAL corregido 2026-10-19 (reportado por Ezequiel: "1695
+            # hoja vs 1676 hoja de ventas, no coincide la venta en dolares en
+            # el ytd"): los campos que trae la API de Redline para una NOTA
+            # CREDITO VENTA (valor_venta_mon_alt, cantidad_cajas9l, cantidad)
+            # YA VIENEN CON SIGNO NEGATIVO (verificado con filas reales:
+            # cantidad=-10, cantidad_cajas9l=-5, valor_venta_mon_alt=-214.67
+            # para una NC real). Multiplicar OTRA VEZ por -1 acá convertía la
+            # Nota de Crédito en venta positiva en vez de restarla -- YTD en
+            # vivo daba USD 1.694,56 (miles) contra el real de Ariel (SNAP I
+            # September 2026, fila TOTAL SALES) de USD 1.676,68 -- ~18k de
+            # diferencia, consistente con 2x el monto de NC del período. Se
+            # saca el `signo`: los campos usados acá van tal cual vienen.
             usd_linea = float(it.get("valor_venta_mon_alt") or 0)
-            usd = signo * usd_linea
-            cajas = signo * float(it.get("cantidad_cajas9l") or 0)
+            usd = usd_linea
+            cajas = float(it.get("cantidad_cajas9l") or 0)
             costo_linea = float(it.get("costo_unit_mon_alt") or 0) * float(it.get("cantidad") or 0)
             # Guarda contra costo_unit_mon_alt corrupto en el origen (ej.
             # "AMALAYA BLANCO DULCE" vendida por VENTA AL PERSONAL en
@@ -156,7 +167,7 @@ def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
             TECHO_COSTO_ABSOLUTO = 500.0
             if (usd_linea and costo_linea > usd_linea * 10) or costo_linea > TECHO_COSTO_ABSOLUTO:
                 costo_linea = 0.0
-            costo_usd = signo * costo_linea
+            costo_usd = costo_linea
             a = acc.setdefault(linea, [0.0, 0.0, 0.0])
             a[0] += usd
             a[1] += cajas

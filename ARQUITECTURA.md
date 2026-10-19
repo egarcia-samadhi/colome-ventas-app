@@ -280,6 +280,50 @@ todos modos) y la mención en "Cómo leer" del sidebar. El backend
 (`snap.py` `_fila()`/`gm_act`) sigue calculando el dato -- no se tocó,
 solo se dejó de mostrar.
 
+**BUG REAL encontrado y corregido 2026-10-19: doble-signo en Notas de
+Crédito, DENTRO del grupo VINOS ** únicamente** (reportado por Ezequiel:
+"1695 hoja vs 1676 hoja de ventas, no coincide la venta en dolares en el
+ytd"). Investigación con muestras reales de `_fetch_dia` confirmó que
+Redline YA manda `valor_venta_mon_alt`/`valor_venta_mon_ext`/
+`valor_mon_loc`/`cantidad`/`cantidad_cajas9l` con signo negativo para una
+NOTA CREDITO VENTA -- pero **solo dentro del grupo "VINOS **"**. Varios
+lugares del código aplicaban ADEMÁS un flip manual (`signo = -1 if
+NC...`), duplicando el signo y convirtiendo la Nota de Crédito en venta
+POSITIVA en vez de restarla.
+
+Validado con 3 fuentes de verdad independientes antes de tocar nada:
+1. **`snap.py`** (`_agregado_sbl`, Sales by Line of Business): comparado
+   contra el SNAP real de Ariel (`SNAP I September 2026 - NM - VSP 2.xls`,
+   fila TOTAL SALES YTD = USD 1.676,68 miles) -- el cálculo en vivo daba
+   USD 1.694,56 (doble-signo), corregido a USD 1.685,29 (0,5% de
+   diferencia residual, dentro de la tolerancia ya aceptada en la
+   investigación original de agosto-2026). **CORREGIDO.**
+2. **`_lineas_vinos()`** (`ig_ventas.py`, compartida por Otros Análisis →
+   Por Cliente/SKU/Vendedor): comparado contra el total ARS de Panel de
+   Ventas (`facts_panel_ventas`, que NUNCA tuvo este flip) para el mismo
+   rango jul-sep 2026 -- match EXACTO tras sacar el doble-signo
+   (2.561.308.999,35 ambos lados, hasta el centavo). **CORREGIDO.**
+3. **`neto_por_jurisdiccion()`/`_agregado_crudo_desglose()`** (Ventas por
+   Jurisdicción, Otros Análisis → desglose por grupo): acá el universo NO
+   se filtra a VINOS ** (incluye INSUMOS/SERVICIOS/etc). Sacar el flip acá
+   ROMPÍA el Cruce AFIP real: recalculando el cruce completo con el campo
+   tal cual viene (sin flip), el error contra el total real de AFIP pasaba
+   de $0,74 a **~$180.000.000** sobre ~$2.057M ARS. Conclusión: el
+   pre-firmado de Redline es específico de VINOS **, no universal -- en
+   el resto de los grupos el flip manual SIGUE HACIENDO FALTA. **NO
+   TOCADO** (se probó revertir y volver a aplicar, quedó como estaba
+   originalmente).
+4. **`neto_y_cae_por_comprobante()`** (Cruce AFIP, universo completo):
+   nunca se tocó -- ya estaba validado por el match real contra AFIP
+   ($0,74 de diferencia sobre $2.057M ARS, $0 sobre USD 459k).
+
+Metodología replicable para auditar el resto del código si aparece otra
+sospecha de descuadre: comparar contra una fuente de verdad INDEPENDIENTE
+del propio código (un Excel real del cliente, o un total ya validado
+contra AFIP) -- el patrón de código "se ve igual" no implica que el bug
+sea el mismo; acá dos funciones con el MISMO código fuente tenían
+comportamiento correcto opuesto según si filtraban VINOS ** o no.
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com

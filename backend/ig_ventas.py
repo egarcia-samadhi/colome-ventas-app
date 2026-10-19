@@ -210,7 +210,16 @@ def neto_por_jurisdiccion(desde: date, hasta_incl: date) -> list[dict]:
     origen y puede NO coincidir con el mes calendario real de la fecha del
     comprobante (confirmado 2026-10-07: filas con fecha 30/09 traen
     periodo="2026-10"). Usar el campo de la fila hacia que un filtro por
-    2026-09 mostrara comprobantes de octubre."""
+    2026-09 mostrara comprobantes de octubre.
+
+    NO sacar el flip de signo de Notas de Crédito acá (investigado
+    2026-10-19 al corregir el bug real de snap.py/_lineas_vinos, que SÍ
+    tenían doble-signo dentro del universo VINOS **): este función cubre
+    el universo COMPLETO (todos los grupos, sin filtrar VINOS), y ahí el
+    flip SÍ hace falta -- comprobado sacándolo y recalculando el Cruce AFIP
+    completo con la misma lógica: el error contra AFIP real pasaba de
+    $0,74 a ~$180M. El campo viene pre-firmado para NC solo DENTRO de
+    VINOS, no en los demás grupos (INSUMOS/SERVICIOS/etc) -- no tocar."""
     acc: dict[tuple[str, str], dict[str, float]] = {}
     filas: dict[tuple[str, str], int] = {}
     vistos_global = set()
@@ -401,7 +410,13 @@ DESGLOSE_AGG_CACHE = CACHE_DIR.parent / "otros_analisis_agg_cerrado.json"
 def _agregado_crudo_desglose(desde: date, hasta_incl: date) -> dict[tuple[str, str], dict[str, float]]:
     """Agregado {(periodo, grupo): {ars, usd}} -- separado de
     desglose_por_grupo() para poder cachear en disco el agregado de los
-    meses ya cerrados, mismo patrón que _agregado_crudo_panel()."""
+    meses ya cerrados, mismo patrón que _agregado_crudo_panel().
+
+    NO sacar el flip de signo de Notas de Crédito acá -- mismo motivo que
+    neto_por_jurisdiccion (ver su docstring): esta función agrupa TODOS los
+    grupos (VINOS/INSUMOS/SERVICIOS), y el flip solo es redundante DENTRO
+    de VINOS (que ya viene pre-firmado) -- en los demás grupos hace falta,
+    comprobado contra el Cruce AFIP real."""
     if hasta_incl < desde:
         return {}
     acc: dict[tuple[str, str], dict[str, float]] = {}
@@ -486,15 +501,25 @@ def desglose_por_grupo(desde: date, hasta_incl: date) -> list[dict]:
 
 def _lineas_vinos(desde: date, hasta_incl: date):
     """Generador de líneas filtradas a TIPOS_VALIDOS + GRUPO_VALIDO ("VINOS
-    **", mismo universo de "Ventas" que Panel de Ventas), con el signo a
-    aplicar a sus magnitudes (-1 en notas de crédito, que revierten la venta
-    completa -- cantidad, cajas, importe Y costo, mismo criterio que
-    neto_por_jurisdiccion/desglose_por_grupo para ARS/USD, extendido acá a
-    cantidad/costo para que %MG y los totales de Por Cliente/SKU/Vendedor
-    queden coherentes). Pensado para un rango de UN SOLO MES (como
-    jurisdiccion.py): no usa el cache de agregado-cerrado de
-    facts_panel_ventas/desglose_por_grupo porque el costo de recalcular un
-    mes solo (días por mes, no ~400 días de historial) ya es bajo."""
+    **", mismo universo de "Ventas" que Panel de Ventas). Pensado para un
+    rango de UN SOLO MES (como jurisdiccion.py): no usa el cache de
+    agregado-cerrado de facts_panel_ventas/desglose_por_grupo porque el
+    costo de recalcular un mes solo (días por mes, no ~400 días de
+    historial) ya es bajo.
+
+    BUG REAL corregido 2026-10-19 (mismo hallazgo que en snap.py --
+    Ezequiel: "1695 hoja vs 1676 hoja de ventas, no coincide la venta en
+    dolares"): antes este generador devolvía un `signo` (-1 para Notas de
+    Crédito) para que cada consumidor lo multiplicara contra
+    cantidad/cajas/importe/costo -- pero esos campos YA VIENEN CON SIGNO
+    NEGATIVO de la API de Redline para una Nota de Crédito (verificado con
+    filas reales). Multiplicar otra vez por -1 convertía la Nota de
+    Crédito en venta positiva en vez de restarla, inflando Por
+    Cliente/SKU/Vendedor -- confirmado comparando el total ARS de Por
+    Cliente contra el total ARS (correcto) de Panel de Ventas para el
+    mismo rango: Por Cliente daba ~14M ARS de más sobre jul-sep 2026. Se
+    saca el `signo` del generador -- los consumidores usan los campos tal
+    cual vienen."""
     vistos_global = set()
     dia = desde
     while dia <= hasta_incl:
@@ -507,8 +532,7 @@ def _lineas_vinos(desde: date, hasta_incl: date):
                 continue
             if it.get("d_grupo") != GRUPO_VALIDO:
                 continue
-            signo = -1.0 if it.get("d_tipo_compro") == "NOTA CREDITO VENTA" else 1.0
-            yield it, signo
+            yield it
         dia += timedelta(days=1)
 
 
@@ -519,16 +543,16 @@ def ventas_por_cliente(desde: date, hasta_incl: date) -> list[dict]:
     Ezequiel 2026-10-19: se omite, no hay un campo 1 a 1 en ig_ventas y no
     vale la pena estimarlo sin validar la fórmula con Ariel)."""
     acc: dict[tuple[str, str], list[float]] = {}
-    for it, signo in _lineas_vinos(desde, hasta_incl):
+    for it in _lineas_vinos(desde, hasta_incl):
         vendedor = it.get("n_vendedor") or "Sin vendedor"
         cliente = it.get("n_cliente") or "Sin cliente"
         a = acc.setdefault((vendedor, cliente), [0.0, 0.0, 0.0, 0.0, 0.0])
         cantidad = float(it.get("cantidad") or 0)
-        a[0] += signo * float(it.get("cantidad_cajas9l") or 0)
-        a[1] += signo * cantidad
-        a[2] += signo * float(it.get("valor_mon_loc") or 0)
-        a[3] += signo * float(it.get("valor_venta_mon_alt") or 0)
-        a[4] += signo * float(it.get("costo_unit_mon_alt") or 0) * cantidad
+        a[0] += float(it.get("cantidad_cajas9l") or 0)
+        a[1] += cantidad
+        a[2] += float(it.get("valor_mon_loc") or 0)
+        a[3] += float(it.get("valor_venta_mon_alt") or 0)
+        a[4] += float(it.get("costo_unit_mon_alt") or 0) * cantidad
     out = []
     for (vendedor, cliente), (cajas, cantidad, ars, usd, costo_usd) in acc.items():
         mg_pct = (usd - costo_usd) / usd if usd else 0.0
@@ -548,7 +572,7 @@ def ventas_por_sku(desde: date, hasta_incl: date) -> list[dict]:
     original, sin Cantidad/Venta Neta/%Desc C en esta hoja. Filas planas, el
     frontend pivotea oficina a columna y sub-totaliza por rubro."""
     acc: dict[tuple[str, str, str, str], list[float]] = {}
-    for it, signo in _lineas_vinos(desde, hasta_incl):
+    for it in _lineas_vinos(desde, hasta_incl):
         k = (
             it.get("d_rubro") or "Sin rubro",
             it.get("c_articulo") or "",
@@ -557,9 +581,9 @@ def ventas_por_sku(desde: date, hasta_incl: date) -> list[dict]:
         )
         a = acc.setdefault(k, [0.0, 0.0, 0.0])
         cantidad = float(it.get("cantidad") or 0)
-        a[0] += signo * float(it.get("cantidad_cajas9l") or 0)
-        a[1] += signo * float(it.get("valor_venta_mon_alt") or 0)
-        a[2] += signo * float(it.get("costo_unit_mon_alt") or 0) * cantidad
+        a[0] += float(it.get("cantidad_cajas9l") or 0)
+        a[1] += float(it.get("valor_venta_mon_alt") or 0)
+        a[2] += float(it.get("costo_unit_mon_alt") or 0) * cantidad
     out = []
     for (rubro, c_articulo, d_articulo, oficina), (cajas, usd, costo_usd) in acc.items():
         mg_pct = (usd - costo_usd) / usd if usd else 0.0
@@ -578,7 +602,7 @@ def ventas_por_vendedor(desde: date, hasta_incl: date) -> list[dict]:
     hoja, igual que el Excel original. Filas planas, el frontend pivotea
     vendedor a columna y sub-totaliza por rubro."""
     acc: dict[tuple[str, str, str, str], list[float]] = {}
-    for it, signo in _lineas_vinos(desde, hasta_incl):
+    for it in _lineas_vinos(desde, hasta_incl):
         k = (
             it.get("d_rubro") or "Sin rubro",
             it.get("c_articulo") or "",
@@ -587,10 +611,10 @@ def ventas_por_vendedor(desde: date, hasta_incl: date) -> list[dict]:
         )
         a = acc.setdefault(k, [0.0, 0.0, 0.0, 0.0])
         cantidad = float(it.get("cantidad") or 0)
-        a[0] += signo * cantidad
-        a[1] += signo * float(it.get("valor_mon_loc") or 0)
-        a[2] += signo * float(it.get("valor_venta_mon_alt") or 0)
-        a[3] += signo * float(it.get("costo_unit_mon_alt") or 0) * cantidad
+        a[0] += cantidad
+        a[1] += float(it.get("valor_mon_loc") or 0)
+        a[2] += float(it.get("valor_venta_mon_alt") or 0)
+        a[3] += float(it.get("costo_unit_mon_alt") or 0) * cantidad
     out = []
     for (rubro, c_articulo, d_articulo, vendedor), (cantidad, ars, usd, costo_usd) in acc.items():
         mg_pct = (usd - costo_usd) / usd if usd else 0.0
