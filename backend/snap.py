@@ -121,10 +121,14 @@ def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
     acc: dict[str, list[float]] = {}
     for it in _lineas_vinos(desde, hasta_incl):
         if it.get("d_rubro") == "FDELMOTTE **":
-            # FdelMotte existe en ig_ventas pero el Excel/SNAP real de la
-            # empresa no la tiene -- se separa del consolidado, mismo
-            # criterio ya confirmado con Ariel Culasso 2026-10-09 para
-            # Panel de Ventas (ver proyecto_colome_fdelmotte_separada).
+            # FdelMotte tiene su propio SNAP separado (pestaña "FdelMotte"
+            # de esta misma hoja) -- queda pre-excluida de "la estadística
+            # de ventas" (Sales by Line of Business), aclarado explícito
+            # por Ezequiel 2026-10-19 al corregir una mala interpretación
+            # de un pedido anterior ("no me refiero a familia del monte,
+            # tiene su propio snap"). Mismo criterio ya confirmado con
+            # Ariel Culasso 2026-10-09 para Panel de Ventas (ver
+            # proyecto_colome_fdelmotte_separada).
             continue
         categoria = it.get("d_categoria") or ""
         if categoria in DOMESTIC_WHOLESALE:
