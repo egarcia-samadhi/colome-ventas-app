@@ -93,8 +93,14 @@ function BuscadorTexto({ valor, onChange, placeholder, label }: { valor: string;
   );
 }
 
-// Chips de selección múltiple (ej. qué vendedores mostrar como columna),
-// versión para el sidebar oscuro.
+// Chips de selección múltiple (ej. qué vendedores mostrar como columna) --
+// MISMO patrón que Panel de Ventas (public/ventas/app.js + ventas.css,
+// clase `.chip`): un checkbox REAL dentro de un <label> con pinta de chip,
+// nunca un <button> que solo cambia de color (norma de trabajo "Filtro
+// on/off: checkbox real, nunca un botón toggle" -- pedido explícito de
+// Ezequiel 2026-10-19: "sacalo como pildora y ponelo con checkbox como
+// esta en panel de ventas"). Mismo dorado (#DCBE84/#b8975a) que usa esa
+// pantalla para el estado marcado.
 function ChipsFiltro({ label, opciones, ocultos, onToggle, onMostrarTodos }: {
   label: string; opciones: string[]; ocultos: Set<string>; onToggle: (v: string) => void; onMostrarTodos: () => void;
 }) {
@@ -107,19 +113,26 @@ function ChipsFiltro({ label, opciones, ocultos, onToggle, onMostrarTodos }: {
           <button onClick={onMostrarTodos} className="text-[10px] text-[#DCBE84] hover:text-white underline">Todos</button>
         )}
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-col gap-1">
         {opciones.map((v) => {
           const activo = !ocultos.has(v);
           return (
-            <button
+            <label
               key={v}
-              onClick={() => onToggle(v)}
-              className={`px-2 py-1 rounded-full text-[11px] font-medium transition ${
-                activo ? "bg-[#7D4E5B] text-white" : "bg-white/5 text-white/40 hover:bg-white/10"
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-[10px] text-[12px] cursor-pointer transition ${
+                activo
+                  ? "bg-gradient-to-br from-[#e7cd9c] to-[#DCBE84] text-[#1c1811] font-semibold"
+                  : "bg-white/5 text-white/75 hover:bg-white/10"
               }`}
             >
+              <input
+                type="checkbox"
+                checked={activo}
+                onChange={() => onToggle(v)}
+                className="accent-[#b8975a] shrink-0"
+              />
               {v}
-            </button>
+            </label>
           );
         })}
       </div>
