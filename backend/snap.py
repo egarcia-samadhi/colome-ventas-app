@@ -127,11 +127,16 @@ def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
             # "AMALAYA BLANCO DULCE" vendida por VENTA AL PERSONAL en
             # agosto-2026: costo unitario de ~USD 1.87M contra un precio de
             # venta de ~USD 2.70 -- rompía el %MG a valores sin sentido como
-            # -19753%). Si el costo de una línea supera 10x su propio
-            # ingreso, se descarta ESE costo puntual (no el ingreso) hasta
-            # que Ariel/Redline confirme el dato real -- pedido explícito de
-            # Ezequiel 2026-10-19.
-            if usd_linea and costo_linea > usd_linea * 10:
+            # -19753%). Dos condiciones, cualquiera descarta ESE costo
+            # puntual (no el ingreso): 1) supera 10x su propio ingreso
+            # (cuando hay ingreso), o 2) supera un techo absoluto de USD 500
+            # -- necesario SOLO con la condición 1 el guard no disparaba en
+            # líneas de ingreso EXACTAMENTE 0 (ej. degustación gratis/100%
+            # desc.), porque `if usd_linea` es falsy con 0.0 y el costo
+            # corrupto pasaba entero. Hasta que Ariel/Redline confirme el
+            # dato real -- pedido explícito de Ezequiel 2026-10-19.
+            TECHO_COSTO_ABSOLUTO = 500.0
+            if (usd_linea and costo_linea > usd_linea * 10) or costo_linea > TECHO_COSTO_ABSOLUTO:
                 costo_linea = 0.0
             costo_usd = signo * costo_linea
             a = acc.setdefault(linea, [0.0, 0.0, 0.0])
