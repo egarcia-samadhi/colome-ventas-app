@@ -52,6 +52,23 @@ function PeriodoSelect({ periodo, onChange }: { periodo: string; onChange: (p: s
   );
 }
 
+// Buscador de texto libre por substring (norma de trabajo 4.sexdecies:
+// dimensiones con muchos valores -- cliente, vendedor, artículo -- se
+// filtran con un input libre, nunca con un <select> de selección única).
+function BuscadorTexto({ valor, onChange, placeholder }: { valor: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <input
+      type="text"
+      value={valor}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="px-3 py-1.5 rounded-md border border-[#ece6d8] text-sm bg-white w-56"
+    />
+  );
+}
+
+const normalizar = (s: string) => s.toLowerCase();
+
 function useOtrosAnalisis<T>(endpoint: string, periodo: string) {
   const [rows, setRows] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,10 +94,16 @@ function useOtrosAnalisis<T>(endpoint: string, periodo: string) {
 
 function PorCliente() {
   const [periodo, setPeriodo] = useState(ultimosPeriodos()[0]);
+  const [busqueda, setBusqueda] = useState("");
   const { rows, loading, error } = useOtrosAnalisis<FilaCliente>("por-cliente", periodo);
 
+  const texto = normalizar(busqueda.trim());
+  const filtradas = texto
+    ? rows.filter((r) => normalizar(r.vendedor).includes(texto) || normalizar(r.cliente).includes(texto))
+    : rows;
+
   const vendedores = new Map<string, FilaCliente[]>();
-  for (const r of rows) {
+  for (const r of filtradas) {
     if (!vendedores.has(r.vendedor)) vendedores.set(r.vendedor, []);
     vendedores.get(r.vendedor)!.push(r);
   }
@@ -96,7 +119,10 @@ function PorCliente() {
           <h3 className="text-sm font-semibold text-[#1c1811]">Por Cliente</h3>
           <p className="text-[11px] text-[#847c68] mt-0.5">Ventas VINOS por vendedor y cliente, Venta Neta en ARS.</p>
         </div>
-        <PeriodoSelect periodo={periodo} onChange={setPeriodo} />
+        <div className="flex items-center gap-3">
+          <BuscadorTexto valor={busqueda} onChange={setBusqueda} placeholder="Buscar vendedor o cliente…" />
+          <PeriodoSelect periodo={periodo} onChange={setPeriodo} />
+        </div>
       </div>
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
       {loading ? (
@@ -143,15 +169,21 @@ function PorCliente() {
 
 function PorSku() {
   const [periodo, setPeriodo] = useState(ultimosPeriodos()[0]);
+  const [busqueda, setBusqueda] = useState("");
   const { rows, loading, error } = useOtrosAnalisis<FilaSku>("por-sku", periodo);
 
+  const texto = normalizar(busqueda.trim());
+  const filtradas = texto
+    ? rows.filter((r) => normalizar(r.rubro).includes(texto) || normalizar(r.d_articulo).includes(texto))
+    : rows;
+
   const oficinasSet = new Set<string>();
-  rows.forEach((r) => oficinasSet.add(r.oficina));
+  filtradas.forEach((r) => oficinasSet.add(r.oficina));
   const orden = ["MERCADO EXTERNO", "MERCADO INTERNO"];
   const oficinas = [...orden.filter((o) => oficinasSet.has(o)), ...[...oficinasSet].filter((o) => !orden.includes(o))];
 
   const rubros = new Map<string, Map<string, { d_articulo: string; porOficina: Map<string, { cajas: number }> }>>();
-  for (const r of rows) {
+  for (const r of filtradas) {
     if (!rubros.has(r.rubro)) rubros.set(r.rubro, new Map());
     const arts = rubros.get(r.rubro)!;
     const key = `${r.c_articulo}::${r.d_articulo}`;
@@ -176,7 +208,10 @@ function PorSku() {
           <h3 className="text-sm font-semibold text-[#1c1811]">Por SKU</h3>
           <p className="text-[11px] text-[#847c68] mt-0.5">Cajas9l por artículo, separado por mercado externo/interno.</p>
         </div>
-        <PeriodoSelect periodo={periodo} onChange={setPeriodo} />
+        <div className="flex items-center gap-3">
+          <BuscadorTexto valor={busqueda} onChange={setBusqueda} placeholder="Buscar rubro o artículo…" />
+          <PeriodoSelect periodo={periodo} onChange={setPeriodo} />
+        </div>
       </div>
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
       {loading ? (
@@ -227,14 +262,30 @@ function PorSku() {
 
 function PorVendedor() {
   const [periodo, setPeriodo] = useState(ultimosPeriodos()[0]);
+  const [busqueda, setBusqueda] = useState("");
+  const [vendedoresOcultos, setVendedoresOcultos] = useState<Set<string>>(new Set());
   const { rows, loading, error } = useOtrosAnalisis<FilaVendedor>("por-vendedor", periodo);
 
+  // Chips de vendedor para elegir qué columnas mostrar -- la tabla pivotea
+  // un vendedor por columna y con ~10 vendedores queda ilegible de ancha
+  // (pedido explícito de Ezequiel 2026-10-19: "esta algo bruto diagramado").
+  const vendedoresTotalesTodos = new Map<string, number>();
+  rows.forEach((r) => vendedoresTotalesTodos.set(r.vendedor, (vendedoresTotalesTodos.get(r.vendedor) || 0) + r.ars));
+  const todosVendedores = [...vendedoresTotalesTodos.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+
+  const texto = normalizar(busqueda.trim());
+  const filtradas = rows.filter((r) => {
+    if (vendedoresOcultos.has(r.vendedor)) return false;
+    if (!texto) return true;
+    return normalizar(r.rubro).includes(texto) || normalizar(r.d_articulo).includes(texto);
+  });
+
   const vendedoresTotales = new Map<string, number>();
-  rows.forEach((r) => vendedoresTotales.set(r.vendedor, (vendedoresTotales.get(r.vendedor) || 0) + r.ars));
+  filtradas.forEach((r) => vendedoresTotales.set(r.vendedor, (vendedoresTotales.get(r.vendedor) || 0) + r.ars));
   const vendedores = [...vendedoresTotales.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
 
   const rubros = new Map<string, Map<string, { d_articulo: string; porVendedor: Map<string, { cantidad: number; ars: number; mg_pct: number }> }>>();
-  for (const r of rows) {
+  for (const r of filtradas) {
     if (!rubros.has(r.rubro)) rubros.set(r.rubro, new Map());
     const arts = rubros.get(r.rubro)!;
     const key = `${r.c_articulo}::${r.d_articulo}`;
@@ -257,10 +308,41 @@ function PorVendedor() {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h3 className="text-sm font-semibold text-[#1c1811]">Por Vendedor</h3>
-          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad y Venta Neta (ARS) por artículo, separado por vendedor. Tabla ancha — se desplaza horizontalmente.</p>
+          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad y Venta Neta (ARS) por artículo, separado por vendedor.</p>
         </div>
-        <PeriodoSelect periodo={periodo} onChange={setPeriodo} />
+        <div className="flex items-center gap-3">
+          <BuscadorTexto valor={busqueda} onChange={setBusqueda} placeholder="Buscar rubro o artículo…" />
+          <PeriodoSelect periodo={periodo} onChange={setPeriodo} />
+        </div>
       </div>
+      {todosVendedores.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-4">
+          <span className="text-[11px] text-[#847c68] mr-1">Vendedores:</span>
+          {todosVendedores.map((v) => {
+            const activo = !vendedoresOcultos.has(v);
+            return (
+              <button
+                key={v}
+                onClick={() => setVendedoresOcultos((prev) => {
+                  const next = new Set(prev);
+                  if (activo) next.add(v); else next.delete(v);
+                  return next;
+                })}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition ${
+                  activo ? "bg-[#7D4E5B] text-white" : "bg-[#f7f5f0] text-[#847c68] hover:bg-[#ece6d8]"
+                }`}
+              >
+                {v}
+              </button>
+            );
+          })}
+          {vendedoresOcultos.size > 0 && (
+            <button onClick={() => setVendedoresOcultos(new Set())} className="text-[11px] text-[#7D4E5B] hover:text-[#9F6375] underline ml-1">
+              Mostrar todos
+            </button>
+          )}
+        </div>
+      )}
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
       {loading ? (
         <div className="h-64 rounded-md bg-[#f7f5f0] animate-pulse" />
