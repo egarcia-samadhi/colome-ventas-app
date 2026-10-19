@@ -50,6 +50,24 @@ def init_db():
             concepto TEXT NOT NULL
         )
     """)
+    # SNAP -> Sales by Line of Business: clasifica combinaciones de
+    # d_centro_costo/d_categoria/d_canal_venta de ig_ventas (universo VINOS
+    # ** con categoria IN ('DTC','HOSPITALIDAD') -- el resto, DBA/DCBA/DNOA/
+    # EXPORTS, ya tiene línea fija, ver snap.py) a una línea de "Direct-to-
+    # consumer Channel". Campo NULL = no filtra por ese campo; si varias
+    # reglas matchean, gana la MÁS ESPECÍFICA (más campos no-nulos). Catálogo
+    # fijo editable a mano (NO auto-sincronizado), mismo criterio que
+    # jurisdiccion_mapa -- pedido explícito de Ezequiel 2026-10-09: "todas
+    # estas asignaciones tienen que estar especificadas en datos maestros".
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS snap_linea_negocio_mapa (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            centro_costo TEXT,
+            categoria TEXT,
+            canal_venta TEXT,
+            linea_negocio TEXT NOT NULL
+        )
+    """)
     conn.commit()
 
     # Semilla fija (2026-10-07, pedido explícito de Ezequiel: "tiene que ser
@@ -69,6 +87,26 @@ def init_db():
         conn.executemany(
             "INSERT INTO jurisdiccion_mapa (valor_api, tipo, concepto) VALUES (?, 'Provincia', ?)",
             [(p, p) for p in provincias],
+        )
+        conn.commit()
+
+    # Semilla de snap_linea_negocio_mapa -- solo lo YA CONFIRMADO por
+    # Ezequiel el 2026-10-09 (texto literal de esa sesión). Combinaciones de
+    # DTC/HOSPITALIDAD que no matcheen ninguna regla caen en "Otro DTC/
+    # Hospitalidad" (ver snap.py) -- el admin agrega reglas nuevas a mano
+    # desde Datos Maestros a medida que aparecen centros de costo nuevos.
+    (cantidad,) = conn.execute("SELECT COUNT(*) FROM snap_linea_negocio_mapa").fetchone()
+    if cantidad == 0:
+        reglas = [
+            (None, None, "ECOMMERCE", "E-commerce"),
+            (None, None, "VENTA AL PERSONAL", "Employees"),
+            ("HOTEL COLOME", None, None, "Colome Hotel"),
+            ("COLOME WINE BAR", "HOSPITALIDAD", None, "Colome Visitor Center"),
+            ("AMALAYA WINE BAR", "HOSPITALIDAD", None, "Cafayate Visitor Center"),
+        ]
+        conn.executemany(
+            "INSERT INTO snap_linea_negocio_mapa (centro_costo, categoria, canal_venta, linea_negocio) VALUES (?, ?, ?, ?)",
+            reglas,
         )
         conn.commit()
     conn.close()

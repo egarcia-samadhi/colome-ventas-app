@@ -23,71 +23,63 @@ function pctClass(v) {
   if (typeof v !== 'number') return 'na';
   return v >= 0 ? 'pos' : 'neg';
 }
-// Budget placeholder detector: flag any budget cell that equals exactly 23 (the literal placeholder found in the sheet)
-function isPlaceholder(v) {
-  return v === 23;
-}
 function td(content, cls) {
   return `<td class="${cls||''}">${content}</td>`;
 }
 
-// ---------- Sales by Line of Business ----------
-const SBL_TOTAL_ROWS = new Set(['TOTAL SALES TO THIRD PARTIES', 'TOTAL SALES', 'Total Grupo Colome Brand', 'Total Buyers Own Brand (BOB)', 'Total Intercompany Sales']);
+// ---------- Sales by Line of Business (conectado en vivo 2026-10-19 a
+// /api/ventas/snap -- ver backend/snap.py. Sin Budget/Forecast, decisión
+// confirmada 2026-10-09: "nunca existió un dato real, se saca". Last Year
+// solo si hay dato real del mismo rango un año atrás.) ----------
+const SBL_TOTAL_ROWS = new Set(['TOTAL SALES TO THIRD PARTIES', 'TOTAL SALES', 'Total Grupo Colome Brand', 'Total Buyers Own Brand (BOB)', 'Total Intercompany Sales', 'Direct-to-consumer Channel']);
 
 function renderSbl(rows) {
   let html = `<table><thead>
     <tr class="grp">
       <th></th>
-      <th class="grp" colspan="5">Sales Value (USD 000s)</th>
+      <th class="grp" colspan="3">Sales Value (USD 000s)</th>
       <th></th>
-      <th class="grp" colspan="6">9 Litre Equivalent</th>
+      <th class="grp" colspan="3">9 Litre Equivalent</th>
       <th></th>
-      <th class="grp" colspan="2">GM %</th>
+      <th class="grp" colspan="1">GM %</th>
     </tr>
     <tr>
       <th>Línea de negocio</th>
-      <th>Actual</th><th>Budget</th><th>Last Year</th><th>% vs Bud</th><th>% vs LY</th>
+      <th>Actual</th><th>Last Year</th><th>% vs LY</th>
       <th></th>
-      <th>Actual</th><th>Budget</th><th>Last Year</th><th>Forecast</th><th>FY Budget</th><th>% vs Bud</th><th>% vs LY</th>
+      <th>Actual</th><th>Last Year</th><th>% vs LY</th>
       <th></th>
-      <th>Act</th><th>Bud</th>
+      <th>Act</th>
     </tr>
   </thead><tbody>`;
 
   rows.forEach(r => {
-    if (r === null) { html += `<tr class="spacer"><td colspan="17"></td></tr>`; return; }
+    if (r === null) { html += `<tr class="spacer"><td colspan="10"></td></tr>`; return; }
     const isTotal = SBL_TOTAL_ROWS.has(r.label);
     html += `<tr class="${isTotal ? 'total' : ''}">`;
     html += td(r.label, 'label');
     html += td(fmtUsd(r.usd_act));
-    html += td(fmtUsd(r.usd_bud), isPlaceholder(r.usd_bud) ? 'flagged' : '');
     html += td(fmtUsd(r.usd_ly));
-    html += td(fmtPct(r.usd_vs_bud), pctClass(r.usd_vs_bud));
     html += td(fmtPct(r.usd_vs_ly), pctClass(r.usd_vs_ly));
     html += `<td></td>`;
     html += td(fmtNum(r.lit_act));
-    html += td(fmtNum(r.lit_bud), isPlaceholder(r.lit_bud) ? 'flagged' : '');
     html += td(fmtNum(r.lit_ly));
-    html += td(fmtNum(r.lit_fcst));
-    html += td(fmtNum(r.lit_fybud));
-    html += td(fmtPct(r.lit_vs_bud), pctClass(r.lit_vs_bud));
     html += td(fmtPct(r.lit_vs_ly), pctClass(r.lit_vs_ly));
     html += `<td></td>`;
     html += td(fmtPct(r.gm_act));
-    html += td(fmtPct(r.gm_bud), isPlaceholder(r.gm_bud) ? 'flagged' : '');
     html += `</tr>`;
   });
 
   html += `</tbody></table>
   <div class="legend-inline">
-    <span><span class="swatch" style="background:var(--good)"></span> Por encima de Budget/LY</span>
-    <span><span class="swatch" style="background:var(--bad)"></span> Por debajo de Budget/LY</span>
-    <span><span class="swatch" style="background:var(--warn-border)"></span> Budget placeholder sin confirmar</span>
+    <span><span class="swatch" style="background:var(--good)"></span> Por encima de LY</span>
+    <span><span class="swatch" style="background:var(--bad)"></span> Por debajo de LY</span>
   </div>`;
   return html;
 }
 
-// ---------- Sales by Market (solo bloque Agosto) ----------
+// ---------- Sales by Market (todavía mock estático -- Sales by Line of
+// Business ya está en vivo, Market queda para una sesión futura) ----------
 const SBM_TOTAL_ROWS = new Set(['Total Domestic', 'Total Caribbean', 'Total Latin America', 'Europe', 'Total Export', 'Total Branded Wine', 'Total Buyers Own Brand', 'TOTAL ', 'TOTAL']);
 const SBM_GROUP_HEADERS = new Set(['Domestic', 'Export', 'Buyers Own Brand']);
 
@@ -123,35 +115,35 @@ function renderSbm(rows) {
       return;
     }
     html += td(fmtUsd(r.usd_act));
-    html += td(fmtUsd(r.usd_bud), isPlaceholder(r.usd_bud) ? 'flagged' : '');
+    html += td(fmtUsd(r.usd_bud));
     html += td(fmtUsd(r.usd_ly));
     html += `<td></td>`;
     html += td(fmtNum(r.lit_act));
-    html += td(fmtNum(r.lit_bud), isPlaceholder(r.lit_bud) ? 'flagged' : '');
+    html += td(fmtNum(r.lit_bud));
     html += td(fmtNum(r.lit_ly));
     html += `<td></td>`;
     html += td(fmtPct(r.gm_act));
-    html += td(fmtPct(r.gm_bud), isPlaceholder(r.gm_bud) ? 'flagged' : '');
+    html += td(fmtPct(r.gm_bud));
     html += `</tr>`;
   });
 
   html += `</tbody></table>
   <div class="legend-inline">
-    <span><span class="swatch" style="background:var(--warn-border)"></span> Budget placeholder sin confirmar</span>
+    <span class="mock-b">Sales by Market: todavía mock, pendiente conectar</span>
   </div>`;
   return html;
 }
 
 // ---------- Stat tiles ----------
 function statTile(label, value, delta, deltaLabel) {
-  const cls = delta === null ? '' : (delta >= 0 ? 'up' : 'down');
-  const arrow = delta === null ? '' : (delta >= 0 ? '▲' : '▼');
-  const deltaHtml = delta === null ? '' : `<div class="delta ${cls}">${arrow} ${(Math.abs(delta)*100).toFixed(1)}% ${deltaLabel}</div>`;
+  const cls = delta === null || delta === 'N/A' ? '' : (delta >= 0 ? 'up' : 'down');
+  const arrow = delta === null || delta === 'N/A' ? '' : (delta >= 0 ? '▲' : '▼');
+  const deltaHtml = (delta === null || delta === 'N/A') ? '' : `<div class="delta ${cls}">${arrow} ${(Math.abs(delta)*100).toFixed(1)}% ${deltaLabel}</div>`;
   return `<div class="stat-tile"><div class="label">${label}</div><div class="value">${value}</div>${deltaHtml}</div>`;
 }
 
 function renderStats(period) {
-  const rows = period === 'aug' ? RAW.sbl_aug : RAW.sbl_ytd;
+  const rows = period === 'mes' ? RAW.sbl_mes : RAW.sbl_ytd;
   const total = rows.find(r => r && r.label === 'TOTAL SALES');
   const domestic = rows.find(r => r && r.label === 'Grupo Colome Domestic');
   const exportRow = rows.find(r => r && r.label === 'Grupo Colome Export');
@@ -166,9 +158,26 @@ function renderStats(period) {
 
 function render(period) {
   renderStats(period);
-  document.getElementById('sblTable').innerHTML = renderSbl(period === 'aug' ? RAW.sbl_aug : RAW.sbl_ytd);
+  document.getElementById('sblTable').innerHTML = renderSbl(period === 'mes' ? RAW.sbl_mes : RAW.sbl_ytd);
   document.getElementById('sbmTable').innerHTML = renderSbm(RAW.sbm);
 }
+
+// Labels del toggle de período (Mes cerrado actual / YTD del ejercicio
+// fiscal) -- antes decían "Agosto 2026" fijo, ahora vienen del backend
+// (RAW.periodo/desde_ytd/hasta_ytd, ver snap.py).
+(function etiquetarPeriodos() {
+  const radios = document.querySelectorAll('input[name="snapPeriod"]');
+  radios.forEach(r => {
+    const label = r.closest('label');
+    if (!label) return;
+    if (r.value === 'aug') {
+      r.value = 'mes';
+      label.lastChild.textContent = ' ' + RAW.periodo;
+    } else if (r.value === 'ytd') {
+      label.lastChild.textContent = ` YTD (${RAW.desde_ytd} a ${RAW.hasta_ytd})`;
+    }
+  });
+})();
 
 document.querySelectorAll('.period-toggle button').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -178,4 +187,7 @@ document.querySelectorAll('.period-toggle button').forEach(btn => {
   });
 });
 
-render('aug');
+// El cambio de período (radios "snapPeriod") ya lo escucha app.js por
+// delegación en #sbSnap (`$('sbSnap').addEventListener('change', ...)`) --
+// no duplicar el listener acá.
+render('mes');

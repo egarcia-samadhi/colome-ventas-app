@@ -19,9 +19,15 @@ import { AppShell } from "@/components/AppShell";
 // 2026-10-08 -- Panel de Ventas y Ventas por Región conectados en vivo a
 // ig_ventas (backend/panel_ventas.py): `colome-facts.json` estático
 // reemplazado por `/api/ventas/panel`, mismo esquema dims/facts exacto, así
-// que `app.js` (portado tal cual del mock) no necesitó cambios. Sales
-// Performance (SNAP) sigue leyendo `colome-data.json` estático -- dataset
-// distinto, no conectado todavía (próxima sesión).
+// que `app.js` (portado tal cual del mock) no necesitó cambios.
+//
+// 2026-10-19 -- Sales Performance (SNAP) -> Sales by Line of Business
+// conectado en vivo a `/api/ventas/snap` (backend/snap.py), reemplazando
+// `sbl_aug`/`sbl_ytd` de `colome-data.json` (claves renombradas a
+// `sbl_mes`/`sbl_ytd`, sin Budget/Forecast -- ver snap.py). `sbm` (Sales by
+// Market) sigue viniendo del JSON estático -- 54 filas con mapeo de ~40
+// países, deferred a una sesión futura. `fetchSnap()` mergea ambas fuentes
+// en un solo objeto con la forma que espera `snap.js`.
 //
 // 2026-10-08 (mismo día, corrección urgente) -- Ezequiel: "entre y sales
 // performance tarda muchísimo!". Causa: `/api/ventas/panel` ahora calcula en
@@ -81,6 +87,17 @@ export default function VentasPage() {
       document.body.appendChild(snapScript);
     };
 
+    // Mergea sbl_mes/sbl_ytd en vivo (/api/ventas/snap) con sbm estático
+    // (colome-data.json, Sales by Market -- sin conectar todavía) en un
+    // solo objeto con la forma que lee snap.js.
+    const fetchSnap = () => Promise.all([
+      fetch("/ventas/colome-data.json").then((r) => r.json()),
+      fetch("/api/ventas/snap").then((r) => {
+        if (r.status === 401) { window.location.href = "/"; return null; }
+        return r.json();
+      }),
+    ]).then(([estatico, vivo]) => JSON.stringify({ ...vivo, sbm: estatico.sbm }));
+
     const inyectarPanel = (factsJson: string, appJs: string) => {
       const factsScript = document.createElement("script");
       factsScript.id = "colome-facts";
@@ -107,7 +124,7 @@ export default function VentasPage() {
       Promise.all([
         fetch("/ventas/sidebar.html").then((r) => r.text()),
         fetch("/ventas/content.html").then((r) => r.text()),
-        fetch("/ventas/colome-data.json").then((r) => r.text()),
+        fetchSnap(),
         fetchPanel(),
         fetch("/ventas/snap.js").then((r) => r.text()),
         fetch("/ventas/app.js").then((r) => r.text()),
@@ -124,7 +141,7 @@ export default function VentasPage() {
     Promise.all([
       fetch("/ventas/sidebar.html").then((r) => r.text()),
       fetch("/ventas/content.html").then((r) => r.text()),
-      fetch("/ventas/colome-data.json").then((r) => r.text()),
+      fetchSnap(),
       fetch("/ventas/snap.js").then((r) => r.text()),
     ]).then(([sidebarHtml, contentHtml, dataJson, snapJs]) => {
       if (sidebarRef.current) sidebarRef.current.innerHTML = sidebarHtml;

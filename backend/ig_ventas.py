@@ -68,6 +68,9 @@ CAMPOS_USADOS = (
     # "d_articulo" se agregó recién (faltaba en la lista original, por eso
     # ventas_por_sku/ventas_por_vendedor mostraban siempre "Sin artículo").
     "c_articulo", "d_articulo", "n_vendedor",
+    # agregado 2026-10-19 para Sales Performance (snap.py) -> clasificar
+    # Colome Hotel / Colome Visitor Center / Cafayate Visitor Center.
+    "d_centro_costo",
 )
 
 
