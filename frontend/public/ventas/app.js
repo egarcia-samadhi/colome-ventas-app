@@ -142,15 +142,27 @@
   const rowsSinPeriodo = () => F.filter(f => okEjercicio(f) && okFiltros(f));
   const rowsFiltradas = () => F.filter(f => okEjercicio(f) && st.periodos.has(PER_DATA[f[0]]) && okFiltros(f));
 
-  // ---------- referencia SNAP (LY / Budget solo a nivel total Grupo) ----------
+  // ---------- referencia SNAP (LY solo a nivel total Grupo -- Budget sacado
+  // del SNAP en vivo, decisión confirmada 2026-10-09: "nunca existió un dato
+  // real, se saca") ----------
+  // BUG REAL corregido 2026-10-19: esta función seguía leyendo RAW['sbl_aug']
+  // (clave vieja, renombrada a 'sbl_mes' cuando Sales by Line of Business
+  // pasó a vivo) y RAW[...].usd_bud/lit_bud (campos que /api/ventas/snap ya
+  // no manda). RAW['sbl_aug'] da undefined, `.find` sobre undefined tira
+  // TypeError no capturado -- esto pasaba DENTRO de la ejecución top-level de
+  // app.js (al entrar a Panel de Ventas), así que cortaba el resto del
+  // script a mitad de camino, incluido el listener de `hashchange` (más
+  // abajo en este archivo) que es el que hace que el nav de arriba
+  // (Panel/Región/Sales Performance) cambie de vista -- por eso la
+  // navegación quedaba rota después de pisar ese error una vez.
   function snapRef(periodosSel) {
-    const tot = k => RAW[k].find(r => r && r.label === 'TOTAL SALES');
-    const y = tot('sbl_ytd'), a = tot('sbl_aug');
+    const tot = k => (RAW[k] || []).find(r => r && r.label === 'TOTAL SALES');
+    const y = tot('sbl_ytd'), a = tot('sbl_mes');
     const sel = [...periodosSel].filter(p => PER_DATA.includes(p)).sort().join(',');
-    const modo = sel === 'P01,P02' ? 'ytd' : sel === 'P02' ? 'aug' : sel === 'P01' ? 'jul' : null;
-    if (!modo) return null;
-    const g = f => (modo === 'ytd' ? y[f] : modo === 'aug' ? a[f] : y[f] - a[f]);
-    return { usd: { ly: g('usd_ly') * 1000, bud: g('usd_bud') * 1000 }, cajas: { ly: g('lit_ly'), bud: g('lit_bud') } };
+    const modo = sel === 'P01,P02' ? 'ytd' : sel === 'P02' ? 'mes' : sel === 'P01' ? 'jul' : null;
+    if (!modo || !y || !a) return null;
+    const g = f => (modo === 'ytd' ? y[f] : modo === 'mes' ? a[f] : y[f] - a[f]);
+    return { usd: { ly: g('usd_ly') * 1000, bud: null }, cajas: { ly: g('lit_ly'), bud: null } };
   }
 
   // ---------- tooltip global (estilo Recharts) ----------
@@ -374,12 +386,15 @@
       (st.comparar ? '<th class="n">Budget</th><th class="n">Var Bud</th>' : '') + '</tr></thead><tbody>';
     defs.forEach(d => {
       const has = d.ly !== null && d.ly !== undefined;
+      // Budget sacado del SNAP (nunca existió un dato real) -- d.bud es
+      // siempre null ahora, se muestra "n/d" en vez de NaN.
+      const hasBud = d.bud !== null && d.bud !== undefined;
       h += `<tr><td class="l" style="color:var(--ink);font-weight:500">${d.nm}</td><td class="n">${d.f(d.act)}</td><td class="n">${has ? d.f(d.ly) : ND}</td>` +
         varCell(has ? d.act - d.ly : null, d.f) + varCell(has && d.ly ? d.act / d.ly - 1 : null);
-      if (st.comparar) h += `<td class="n">${has ? d.f(d.bud) : ND}</td>` + varCell(has ? d.act - d.bud : null, d.f);
+      if (st.comparar) h += `<td class="n">${hasBud ? d.f(d.bud) : ND}</td>` + varCell(hasBud ? d.act - d.bud : null, d.f);
       h += '</tr>';
     });
-    h += `</tbody></table></div><div class="hint">${ref ? 'LY y Budget tomados del SNAP (total Grupo Colomé, mismo período).' : 'n/d: LY y Budget del SNAP existen solo a nivel total Grupo y para P01, P02 o P01–P02 sin filtros. Redline no tiene datos anteriores a sep-2025.'}</div></div>`;
+    h += `</tbody></table></div><div class="hint">${ref ? 'LY tomado del SNAP (total Grupo Colomé, mismo período) -- Budget n/d, nunca existió un dato real (ver Sales Performance).' : 'n/d: LY del SNAP existe solo a nivel total Grupo y para P01, P02 o P01–P02 sin filtros. Redline no tiene datos anteriores a sep-2025.'}</div></div>`;
     h += `<div class="card chart"><h3>Evolución por período — ${key === 'usd' ? 'Ingresos (US$)' : 'Cajas 9L'}</h3>${evolucionSvg()}</div>`;
     h += `<div class="card chart"><h3>Ventas por país — Ejercicio ${st.ejercicio}</h3>${svgVBars(groupBy(rows, I.pais), r => nombrePropio(D.pais[r.k]))}</div>`;
     h += '<div class="grid2">' +

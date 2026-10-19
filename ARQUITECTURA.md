@@ -220,6 +220,26 @@ una sola página larga; ahora son sub-pestañas "Jurisdicción"/"SNAP — Línea
 de negocio", mismo patrón `SUB_TABS`+`?tab=` que Ctrl AFIP (deep-linking
 desde Controles).
 
+**BUG REAL encontrado y corregido 2026-10-19: navegación rota después de
+visitar Panel de Ventas** (reportado por Ezequiel: "marco una hoja y me
+muestra el snap"). Causa raíz en `public/ventas/app.js`, función
+`snapRef()`: seguía leyendo `RAW['sbl_aug']` (clave vieja, renombrada a
+`sbl_mes` cuando Sales by Line of Business pasó a vivo) y campos
+`usd_bud`/`lit_bud` que `/api/ventas/snap` ya no manda (Budget sacado del
+SNAP, decisión 2026-10-09). `RAW['sbl_aug']` daba `undefined`, `.find`
+sobre `undefined` tiraba `TypeError` SIN CAPTURAR -- esto corría dentro de
+la ejecución top-level de `app.js` al entrar a Panel de Ventas (`renderPanel`
+-> `snapRef` -> `tot`), así que cortaba el resto del script a mitad de
+camino, incluido el `window.addEventListener('hashchange', ...)` que es
+el que hace que el nav superior (Panel/Región/Sales Performance) cambie de
+vista. Una vez pisado ese error, el nav seguía resaltando el pill correcto
+(eso lo maneja React en `AppShell.tsx`, independiente) pero el contenido
+quedaba congelado en lo que fuera que content.html tenía por default
+(`view-snap` visible, sin `hidden`, en el HTML crudo). Fix: `snapRef` usa
+`sbl_mes`, devuelve `bud: null` explícito, y la tabla comparativa de Panel
+de Ventas muestra "n/d" en la columna Budget en vez de `NaN` (`hasBud`
+separado de `has`/LY).
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com
