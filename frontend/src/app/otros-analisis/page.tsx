@@ -23,8 +23,8 @@ interface FilaCliente { vendedor: string; cliente: string; cajas: number; cantid
 interface FilaSku { rubro: string; c_articulo: string; d_articulo: string; oficina: string; cajas: number; mg_pct: number }
 interface FilaVendedor { rubro: string; c_articulo: string; d_articulo: string; vendedor: string; cantidad: number; ars: number; mg_pct: number }
 
-const fmtNum = (n: number, dec = 2) =>
-  n === 0 ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+const fmtNum = (n: number) =>
+  n === 0 ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 function ultimosPeriodos(cantidad = 24): string[] {
   const hoy = new Date();
@@ -120,15 +120,15 @@ function PorCliente() {
                   {g.filas.sort((a, b) => b.ars - a.ars).map((f) => (
                     <tr key={`${g.vendedor}::${f.cliente}`} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
                       <td className="py-1.5 px-3 pl-6 text-[#1c1811]">{f.cliente}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas, 4)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cantidad, 0)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cantidad)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
                     </tr>
                   ))}
                   <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
                     <td className="py-1.5 px-3 text-[#1c1811]">Total {g.vendedor}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(g.total.cajas, 4)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(g.total.cantidad, 0)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(g.total.cajas)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(g.total.cantidad)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(g.total.ars)}</td>
                   </tr>
                 </Fragment>
@@ -204,16 +204,16 @@ function PorSku() {
                       {oficinas.map((o) => {
                         const v = f.porOficina.get(o);
                         return (
-                          <td key={o} className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{v ? fmtNum(v.cajas, 4) : "—"}</td>
+                          <td key={o} className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{v ? fmtNum(v.cajas) : "—"}</td>
                         );
                       })}
-                      <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4] font-medium">{fmtNum(f.totalCajas, 4)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4] font-medium">{fmtNum(f.totalCajas)}</td>
                     </tr>
                   ))}
                   <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
                     <td className="py-1.5 px-3 text-[#1c1811]">Total {g.rubro}</td>
                     {oficinas.map((o) => <td key={o} className="border-l border-[#ece6d8]" />)}
-                    <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{fmtNum(g.totalRubroCajas, 4)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{fmtNum(g.totalRubroCajas)}</td>
                   </tr>
                 </Fragment>
               ))}
@@ -297,7 +297,7 @@ function PorVendedor() {
                         const val = f.porVendedor.get(v);
                         return (
                           <Fragment key={v}>
-                            <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{val ? fmtNum(val.cantidad, 0) : "—"}</td>
+                            <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{val ? fmtNum(val.cantidad) : "—"}</td>
                             <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.ars) : "—"}</td>
                           </Fragment>
                         );
