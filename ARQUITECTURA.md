@@ -8,7 +8,7 @@ pill flotante, sidebar oscuro `#2b2d31`, acento dorado/bordó) — ver
 antes, creado 2026-10-19 al cerrar la sesión de Otros Análisis — ver norma
 de trabajo "Actualizar ARQUITECTURA.md al cerrar").
 
-Última actualización: 2026-10-19.
+Última actualización: 2026-10-19 (sesión SNAP -> Sales by Line of Business).
 
 ## Estructura
 
@@ -31,9 +31,13 @@ backend/
   datos_maestros.py          -- Jurisdicción (mapa valor_api -> concepto)
   auditoria.py                -- descarga línea a línea (regla de oro #33)
   otros_analisis.py             -- endpoints de Otros Análisis (ver abajo)
+  snap.py                         -- SNAP -> Sales by Line of Business EN VIVO
+                                      (ver detalle abajo); Sales by Market
+                                      sigue siendo mock estático
 frontend/
   src/app/
-    page.tsx                -- Ventas (mock portado: Panel/Región/SNAP por hash)
+    page.tsx                -- Ventas (mock portado: Panel/Región/SNAP por hash;
+                                SNAP mergea /api/ventas/snap en vivo + sbm mock)
     ctrl-afip/page.tsx        -- Cruce AFIP / Info AFIP / Ventas por Jurisdicción
     controles/page.tsx          -- Panel de Controles
     otros-analisis/page.tsx       -- Por Cliente / Por SKU / Por Vendedor (ver abajo)
@@ -94,6 +98,51 @@ si se vuelve a pedir — ver `ig_ventas.py`).
   `PYTHONPATH=/app` — precalienta el mes que acaba de cerrar antes de que
   cualquier usuario lo pida. Detalle completo en memoria de Claude
   `proyecto_colome_ventas_otros_analisis`.
+
+## SNAP -> Sales by Line of Business (agregado 2026-10-19)
+
+Réplica en vivo de la hoja "Sales by Line of Business" del SNAP real
+(`SNAP I Aug 2026 - NM - vsp.xls`), reemplazando `colome-data.json`
+estático. Sin Budget/Forecast (decisión 2026-10-09: "nunca existió un
+dato real"). Last Year solo si hay dato real del mismo rango un año
+atrás. Ejercicio fiscal Colomé: julio a junio (igual que `app.js`).
+
+**Partición completa por `d_categoria`** (6 valores reales posibles):
+DBA/DCBA/DNOA → Grupo Colome Domestic (mayorista), EXPORTS → Grupo Colome
+Export, DTC/HOSPITALIDAD → Direct-to-consumer Channel (sub-clasificado por
+`snap_linea_negocio_mapa`, Datos Maestros -> combinaciones sin clasificar
+caen en "Otro DTC/Hospitalidad", se suman igual, solo sin nombre propio).
+Jerarquía de totales (reconstruida comparando números reales del mock, no
+inventada): `Total Grupo Colome Brand = Domestic + Export`; `DTC Channel =
+Employees + E-commerce + Colome Hotel + Colome Visitor Center + Cafayate
+Visitor Center + Otro` (subtotal calculado, NO query independiente);
+`TOTAL SALES TO THIRD PARTIES = Brand + DTC Channel + BOB`; `TOTAL SALES =
+Third Parties + Intercompany`. BOB (Ascension) e Intercompany (GC Wines
+Uruguay) en 0 fijo -- investigado, no hay ventas reales de esos canales en
+los 13 meses de histórico.
+
+**3 gotchas de calidad de dato encontrados y corregidos** (validar SIEMPRE
+contra un mes real antes de avisar que algo está listo -- los primeros
+números parecían razonables a simple vista pero tenían 2 bugs reales
+escondidos):
+1. **FdelMotte** (`d_rubro="FDELMOTTE **"`) hay que excluirla del
+   consolidado -- existe en ig_ventas pero no en el Excel/SNAP real (mismo
+   criterio ya confirmado para Panel de Ventas).
+2. **`costo_unit_mon_alt` corrupto** en ciertos artículos vendidos por
+   VENTA AL PERSONAL/HOSPITALIDAD (ej. "AMALAYA BLANCO DULCE" con costo
+   ~USD 1.87M/botella contra un precio de ~USD 2.70) -- guard de 2
+   condiciones en `snap.py` (costo >10x el ingreso de la línea, O costo
+   absoluto >USD 500; la primera condición SOLA no alcanza porque con
+   ingreso exactamente $0 -- degustación gratis -- `if usd_linea` es falsy
+   y no dispara).
+3. **`costo_unit_mon_alt` prácticamente vacío para el canal mayorista**
+   (DBA/DCBA/DNOA): verificado, ~USD 2 de costo sobre ~USD 220.000 de
+   venta en agosto-2026. Mostrar %MG ahí da un ~100% engañoso -- se marca
+   `gm_act="N/A"` explícito (parámetro `sin_costeo=True` en `_fila()`) para
+   Domestic/Export/AirLines, no se inventa ni se oculta el hallazgo.
+
+**Pendiente**: Sales by Market (54 filas, ~40 países con subtotales por
+región) sigue siendo mock estático, deliberadamente fuera de esta sesión.
 
 ## Deploy
 
