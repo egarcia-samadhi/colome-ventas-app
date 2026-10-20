@@ -377,6 +377,48 @@ Ventas (USD 1.676,661k ambos lados, jul-sep 2026). Commit
 `cac5270078e11269fc51ffb4ab228eab0d6706dc`. Detalle completo de la
 investigación en memoria de Claude, `proyecto_colome_sales_performance_en_vivo`.
 
+**MISMO DÍA, continuación: LY completo + Budget real en Panel de Ventas.**
+Dos fixtures estáticas nuevas en `backend/` (JSON, commiteadas, agregar al
+`COPY` del Dockerfile si se tocan):
+- `lfy_jul_ago_2025.json` -- jul-ago 2025 (el hueco antes de
+  `DESDE_HISTORICO`), extraído de `LFY.xlsx` que mandó Ariel, agregado por
+  (periodo, línea de negocio). Clasificación de línea INFERIDA del campo
+  `Centro` del archivo (no trae línea explícita) -- validada después con
+  el SNAP real de Ariel (`YTD - Snap - ly.xlsx`), coincide exacto.
+- `budget_2026_2027.json` -- presupuesto real del ejercicio ACTUAL
+  2026-2027 (jul-2026 a jun-2027), extraído de `Budget_Dinamico.xlsx`,
+  agregado a TOTAL por mes (sin desglose por línea). Revierte la decisión
+  del 2026-10-09 ("Budget sacado, nunca existió un dato real"). **El
+  archivo etiqueta su columna `Año_Fiscal` como "2025-2026", pero Ariel
+  confirmó que esa etiqueta está mal -- es el ejercicio en curso.** Se
+  reextrajo mapeando `Nro_Mes` directo a 2026-07..2027-06, ignorando esa
+  columna del archivo.
+
+`snap.py::_agregado_sbl_con_lfy()` combina la fixture LFY con
+`_agregado_sbl()` mes a mes -- reemplaza a `_agregado_sbl()` SOLO en el
+cálculo de LY de `ventas_sbl()`. `snap.py::_ly_mensual()` expone TOTAL
+SALES actual+LY+Budget por mes calendario (campo `ly_mensual` en
+`/api/ventas/snap`) para que Panel de Ventas (`app.js::snapRef()`) pueda
+sumar cualquier combinación de períodos tildados en el sidebar -- antes
+`snapRef()` solo reconocía P01/P02/P01+P02 fijos.
+
+**3 gotchas reales encontrados en el camino:**
+1. `_cero()` (BOB/Intercompany, fijos en 0) devolvía `usd_ly=None` en vez
+   de `0.0` -- `_sumar()` exige TODAS las filas con LY no-nulo, así que
+   TOTAL SALES mostraba "n/d" SIEMPRE, incluso con LY real disponible.
+2. La vista default de Panel de Ventas siempre incluye el período EN
+   CURSO (nunca tiene LY) -- `snapRef()` ahora filtra a los meses YA
+   CERRADOS de la selección y recalcula el "Actual" de esa tabla sobre el
+   MISMO subconjunto (nunca comparar rangos de distinta longitud).
+3. LY y Budget tienen disponibilidad INDEPENDIENTE por mes -- no asumir
+   que un rango con una tiene necesariamente la otra (hoy jul-sep 2026
+   tiene ambas, pero jul-ago 2025, antes del histórico en vivo, solo
+   tiene LY vía LFY, nunca Budget del ejercicio actual). Cada métrica se
+   calcula con su propia condición de completitud, no una sola.
+
+Detalle completo en memoria de Claude,
+`proyecto_colome_sales_performance_en_vivo`.
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com

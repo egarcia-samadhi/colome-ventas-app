@@ -144,10 +144,11 @@
 
   // ---------- referencia SNAP (LY/Budget solo a nivel total Grupo) ----------
   // Budget: decisión original 2026-10-09 ("nunca existió un dato real, se
-  // saca") revertida PARCIALMENTE 2026-10-20 -- Ariel mandó un Budget real
-  // (`Budget_Dinamico.xlsx`), pero SOLO para el ejercicio 2025-2026 (ver
-  // snap.py::_budget_mensual) -- el ejercicio actual (2026-2027) sigue sin
-  // Budget real, sigue en "n/d" ahí a propósito.
+  // saca") revertida 2026-10-20 -- Ariel mandó un Budget real
+  // (`Budget_Dinamico.xlsx`) para el ejercicio ACTUAL, 2026-2027 (ver
+  // snap.py::_budget_mensual -- el archivo lo etiquetaba mal como
+  // "2025-2026", Ariel confirmó después que es del ejercicio en curso).
+  // Ejercicios anteriores siguen sin Budget real, "n/d" ahí a propósito.
   // BUG REAL corregido 2026-10-19: esta función seguía leyendo RAW['sbl_aug']
   // (clave vieja, renombrada a 'sbl_mes' cuando Sales by Line of Business
   // pasó a vivo) y RAW[...].usd_bud/lit_bud (campos que /api/ventas/snap ya
@@ -191,14 +192,15 @@
   // tabla.
   // TERCER AJUSTE 2026-10-20 (mismo día, Budget real agregado -- Ezequiel:
   // "subamos tambien esta info del budget"): LY y Budget tienen
-  // disponibilidad INDEPENDIENTE -- jul-ago 2025 tiene Budget real (del
-  // ejercicio 2025-2026) pero NO tiene LY real (necesitaría jul-ago 2024,
-  // que no existe en ningún lado). Filtrar `metas` por "tiene LY" como
-  // antes escondía el Budget de esos meses sin necesidad -- ahora `metas`
-  // es solo "mes ya cerrado" (existe en `ly_mensual`), y LY/Budget se
-  // suman cada uno con su propia condición de "están TODOS los meses
-  // seleccionados disponibles para esa métrica" (si falta uno, esa
-  // métrica puntual da n/d, pero no tira abajo a la otra).
+  // disponibilidad INDEPENDIENTE por mes -- no todo rango que tenga una
+  // tiene necesariamente la otra (ej. jul-ago 2025, antes del histórico
+  // en vivo, nunca tiene Budget real del ejercicio actual aunque sí tenga
+  // LY vía LFY). Filtrar `metas` por "tiene LY" escondería el Budget de
+  // meses donde solo falta LY, y viceversa -- `metas` es solo "mes ya
+  // cerrado" (existe en `ly_mensual`), y LY/Budget se suman cada uno con
+  // su propia condición de "están TODOS los meses seleccionados
+  // disponibles para esa métrica" (si falta uno, esa métrica puntual da
+  // n/d, pero no tira abajo a la otra).
   function snapRef(ejercicio, periodosSel) {
     const dispEj = periodosConDato(ejercicio);
     const seleccionados = PERIODOS.filter(p => periodosSel.has(p) && dispEj.has(p));
@@ -456,7 +458,7 @@
       h += '</tr>';
     });
     const hintRef = ref
-      ? 'LY/Budget tomados del SNAP (total Grupo Colomé)' + (ref.parcial ? ' -- Actual, LY y Budget de esta tabla recalculados SOLO sobre los meses ya cerrados de la selección (excluye el mes en curso, todavía sin cerrar)' : ', mismo período') + '. Budget real solo existe para el ejercicio 2025-2026 -- "n/d" en el ejercicio actual (2026-2027) a propósito, todavía no se cargó ese presupuesto.'
+      ? 'LY/Budget tomados del SNAP (total Grupo Colomé)' + (ref.parcial ? ' -- Actual, LY y Budget de esta tabla recalculados SOLO sobre los meses ya cerrados de la selección (excluye el mes en curso, todavía sin cerrar)' : ', mismo período') + '. Budget real solo existe para el ejercicio 2026-2027 -- "n/d" en ejercicios anteriores a propósito, no hay presupuesto real cargado ahí.'
       : 'n/d: LY/Budget del SNAP existen solo a nivel total Grupo, sin filtros activos, y solo para períodos que ya tengan ese dato real cargado.';
     h += `</tbody></table></div><div class="hint">${hintRef}</div></div>`;
     h += `<div class="card chart"><h3>Evolución por período — ${key === 'usd' ? 'Ingresos (US$)' : 'Cajas 9L'}</h3>${evolucionSvg()}</div>`;

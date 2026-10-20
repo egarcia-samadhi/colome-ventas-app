@@ -111,11 +111,16 @@ def _lfy_agregado() -> dict[tuple[str, str], list[float]]:
 # trae Budget por línea, ver `YTD - Snap - ly.xlsx`, columna "Budget" vacía
 # en TODAS las filas, Total incluido). Validado contra la propia hoja
 # "Control" del archivo (cuadre interno de Ariel): 185.062,75 cajas totales,
-# USD 10.556.951,16 -- exacto. SOLO cubre el ejercicio fiscal 2025-2026
-# (jul-2025 a jun-2026) -- el ejercicio ACTUAL (2026-2027) todavía no tiene
-# Budget real cargado en ningún lado, sigue en "n/d" a propósito (nunca
-# inventar un presupuesto que no existe)."""
-BUDGET_RUTA = Path(__file__).parent / "budget_2025_2026.json"
+# USD 10.556.951,16 -- exacto.
+#
+# CORREGIDO el mismo día: el archivo etiqueta su columna `Año_Fiscal` como
+# "2025-2026", pero Ariel confirmó después que esa etiqueta está mal -- el
+# presupuesto real es del ejercicio EN CURSO, 2026-2027 (jul-2026 a
+# jun-2027). Se reextrajo mapeando Nro_Mes directo a 2026-07..2027-06
+# (ignorando el campo `Año_Fiscal` del archivo, que quedó desfasado un
+# año). Esto SÍ cubre el ejercicio actual -- no hace falta esperar otro
+# presupuesto."""
+BUDGET_RUTA = Path(__file__).parent / "budget_2026_2027.json"
 _budget_cache: dict[str, list[float]] | None = None
 
 
@@ -479,9 +484,9 @@ def _ly_mensual() -> list[dict]:
     "n/d" según qué meses necesite sumar.
 
     `usd_bud`/`lit_bud` agregados el mismo día con el Budget real del
-    ejercicio 2025-2026 (ver `_budget_mensual`) -- `None` para cualquier
-    mes fuera de ese ejercicio (el actual, 2026-2027, no tiene Budget real
-    todavía)."""
+    ejercicio ACTUAL 2026-2027 (ver `_budget_mensual` -- corregido el
+    mismo día, el archivo de origen lo etiquetaba mal como "2025-2026")
+    -- `None` para cualquier mes fuera de ese ejercicio."""
     _, hasta_cerrado = _mes_cerrado_anterior()
     budget = _budget_mensual()
     out = []
