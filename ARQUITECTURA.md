@@ -8,7 +8,7 @@ pill flotante, sidebar oscuro `#2b2d31`, acento dorado/bordó) — ver
 antes, creado 2026-10-19 al cerrar la sesión de Otros Análisis — ver norma
 de trabajo "Actualizar ARQUITECTURA.md al cerrar").
 
-Última actualización: 2026-10-19 (sesión SNAP -> Sales by Line of Business).
+Última actualización: 2026-10-20 (fix de corte de fecha en `_lineas_vinos`, residuo 1676 vs 1685 cerrado).
 
 ## Estructura
 
@@ -60,8 +60,9 @@ Panel de Ventas, NO el 100% AFIP que usa Desglose por Grupo). "% Desc C" y
 si se vuelve a pedir — ver `ig_ventas.py`).
 
 - **Backend:** `ig_ventas.py::_lineas_vinos()` (generador compartido,
-  filtra TIPOS_VALIDOS+VINOS**, aplica signo -1 en notas de crédito a
-  TODAS las magnitudes) + `ventas_por_cliente/sku/vendedor()`. Endpoints en
+  filtra TIPOS_VALIDOS+VINOS**+fecha real dentro del rango pedido -- SIN
+  flip de signo manual, ver corrección 2026-10-19/20 más abajo) +
+  `ventas_por_cliente/sku/vendedor()`. Endpoints en
   `otros_analisis.py`: `/api/otros-analisis/por-{cliente,sku,vendedor}
   ?periodo=YYYY-MM`, un mes calendario a la vez (mismo patrón que
   `jurisdiccion.py`), sin cache de agregado histórico propio (ya es barato,
@@ -357,6 +358,24 @@ elimina la posibilidad de que las dos funciones diverjan a futuro por
 mantenerse por separado, pero NO cierra el residuo de 0,5% contra Ariel
 (que no es un problema de pipeline duplicado, ya que Otros Análisis daba
 el mismo número).
+
+**CERRADO 2026-10-20: el residuo de 0,5% (USD 8,63k, "1676 vs 1685") era
+un BUG REAL, no una diferencia de timing contra el Excel de Ariel como se
+había hipotetizado el día anterior.** Causa: `_lineas_vinos()` no tenía el
+fix de "corte de fecha no limpio" de la API que `_periodo_de_fila()` (usada
+por Panel de Ventas/Jurisdicción) ya tenía desde el 2026-10-08. Al pedir el
+día 30/09, la API ORDS devuelve además líneas cuya `fecha` real es 01/10
+(confirmado con el fetch real de ese día: 87 líneas de 30/09 + 80 líneas de
+01/10, USD 8.625,32 exactos) -- Panel de Ventas las reubicaba bien en
+octubre, `_lineas_vinos` las contaba de más en septiembre, inflando snap Y
+Otros Análisis por igual. Fix: se agregó dentro de `_lineas_vinos()` el
+mismo filtro por fecha real (`it.get("fecha")` contra `[desde, hasta_incl]`,
+nunca el día del loop) -- corrige ambos consumidores de una sola vez, sin
+reconstruir snap sobre otro pipeline. Validado en el VPS antes y después
+del deploy: snap sin FdelMotte converge EXACTO con el cache de Panel de
+Ventas (USD 1.676,661k ambos lados, jul-sep 2026). Commit
+`cac5270078e11269fc51ffb4ab228eab0d6706dc`. Detalle completo de la
+investigación en memoria de Claude, `proyecto_colome_sales_performance_en_vivo`.
 
 ## Deploy
 
