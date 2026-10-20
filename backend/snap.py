@@ -442,6 +442,37 @@ def _meses_disponibles() -> list[str]:
     return out
 
 
+def _ly_mensual() -> list[dict]:
+    """TOTAL SALES actual+LY por mes calendario, desde `LFY_DESDE`
+    (2025-07) hasta el último mes cerrado -- agregado 2026-10-20 para que
+    Panel de Ventas pueda mostrar LY para CUALQUIER combinación de
+    períodos que el usuario tilde en el sidebar (antes `snapRef()` en
+    app.js solo reconocía 3 casos fijos: P01, P02, P01+P02, justo los
+    únicos 2 meses que en su momento tenían LY real. Con LFY (jul-ago
+    2025) + histórico real en vivo (set-2025 en adelante) ya hay LY para
+    TODO el rango que muestra Panel de Ventas, no solo esos 2 meses --
+    Ezequiel: "si, asi tenemos todo el ly y empezamos a completar todas
+    las hojas"). Un mes sin LY real (ej. jul-2025, que necesitaría
+    jul-2024) queda con `usd_ly=None` -- el frontend decide si mostrar
+    "n/d" según qué meses necesite sumar."""
+    _, hasta_cerrado = _mes_cerrado_anterior()
+    out = []
+    anio, mes = LFY_DESDE.year, LFY_DESDE.month
+    while date(anio, mes, 1) <= hasta_cerrado:
+        mes_ini, mes_fin = _rango_mes(anio, mes)
+        filas = ventas_sbl(mes_ini, mes_fin)
+        tot = next((f for f in filas if f and f["label"] == "TOTAL SALES"), None)
+        out.append({
+            "periodo": f"{anio:04d}-{mes:02d}",
+            "usd_act": tot["usd_act"] if tot else 0.0,
+            "lit_act": tot["lit_act"] if tot else 0.0,
+            "usd_ly": tot["usd_ly"] if tot else None,
+            "lit_ly": tot["lit_ly"] if tot else None,
+        })
+        anio, mes = (anio + 1, 1) if mes == 12 else (anio, mes + 1)
+    return out
+
+
 def require_reader(request: Request):
     from app import get_sso_session
     session = get_sso_session(request)
@@ -452,7 +483,8 @@ def require_reader(request: Request):
 
 @router.get("/snap")
 async def snap(mes: str | None = None, user=Depends(require_reader)):
-    """{sbl_mes, sbl_ytd, periodo, desde_ytd, hasta_ytd, meses_disponibles}.
+    """{sbl_mes, sbl_ytd, periodo, desde_ytd, hasta_ytd, meses_disponibles,
+    ly_mensual}.
     `mes` (query param "YYYY-MM", opcional) elige qué mes mostrar en
     "Monthly" -- y hasta qué mes llega el YTD (desde el inicio del
     ejercicio fiscal). Sin `mes`, default al último mes calendario CERRADO
@@ -475,4 +507,5 @@ async def snap(mes: str | None = None, user=Depends(require_reader)):
         "meses_disponibles": disponibles,
         "sbl_mes": ventas_sbl(desde_mes, hasta_mes),
         "sbl_ytd": ventas_sbl(desde_ytd, hasta_mes),
+        "ly_mensual": _ly_mensual(),
     }

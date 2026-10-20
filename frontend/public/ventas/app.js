@@ -155,14 +155,34 @@
   // abajo en este archivo) que es el que hace que el nav de arriba
   // (Panel/Región/Sales Performance) cambie de vista -- por eso la
   // navegación quedaba rota después de pisar ese error una vez.
-  function snapRef(periodosSel) {
-    const tot = k => (RAW[k] || []).find(r => r && r.label === 'TOTAL SALES');
-    const y = tot('sbl_ytd'), a = tot('sbl_mes');
-    const sel = [...periodosSel].filter(p => PER_DATA.includes(p)).sort().join(',');
-    const modo = sel === 'P01,P02' ? 'ytd' : sel === 'P02' ? 'mes' : sel === 'P01' ? 'jul' : null;
-    if (!modo || !y || !a) return null;
-    const g = f => (modo === 'ytd' ? y[f] : modo === 'mes' ? a[f] : y[f] - a[f]);
-    return { usd: { ly: g('usd_ly') * 1000, bud: null }, cajas: { ly: g('lit_ly'), bud: null } };
+  //
+  // GENERALIZADO 2026-10-20 (antes solo reconocía P01, P02 o P01+P02 --
+  // justo los únicos 2 meses que en su momento tenían LY real en el SNAP.
+  // Ezequiel: "asi tenemos todo el ly y empezamos a completar todas las
+  // hojas"). Ahora snap.py manda `ly_mensual` (TOTAL SALES actual+LY por
+  // mes calendario, ver snap.py::_ly_mensual) y esta función suma
+  // CUALQUIER combinación de períodos tildados en el sidebar -- "n/d" solo
+  // si ALGUNO de los meses seleccionados todavía no tiene LY real (nunca
+  // una comparación parcial silenciosa).
+  function periodoACalendario(ejercicio, p) {
+    const [y1, y2] = ejercicio.split('-').map(Number);
+    const idx = PERIODOS.indexOf(p);
+    const mes = ((idx + 6) % 12) + 1;
+    const anio = mes >= 7 ? y1 : y2;
+    return `${anio}-${String(mes).padStart(2, '0')}`;
+  }
+  function lyMes(periodoCrudo) {
+    return (RAW.ly_mensual || []).find(m => m.periodo === periodoCrudo) || null;
+  }
+  function snapRef(ejercicio, periodosSel) {
+    const dispEj = periodosConDato(ejercicio);
+    const metas = PERIODOS
+      .filter(p => periodosSel.has(p) && dispEj.has(p))
+      .map(p => lyMes(periodoACalendario(ejercicio, p)));
+    if (!metas.length || metas.some(m => !m || m.usd_ly === null)) return null;
+    const usd_ly = metas.reduce((s, m) => s + m.usd_ly, 0);
+    const lit_ly = metas.reduce((s, m) => s + m.lit_ly, 0);
+    return { usd: { ly: usd_ly * 1000, bud: null }, cajas: { ly: lit_ly, bud: null } };
   }
 
   // ---------- tooltip global (estilo Recharts) ----------
@@ -255,7 +275,7 @@
     const act = PERIODOS.map(p => (dispEj.has(p) ? total(base.filter(f => PER_DATA[f[0]] === p))[key] : null));
     const ly = PERIODOS.map(p => {
       if (filtrosActivos()) return null;
-      const r = (p === 'P01' || p === 'P02') ? snapRef(new Set([p])) : null;
+      const r = dispEj.has(p) ? snapRef(st.ejercicio, new Set([p])) : null;
       return r ? r[key].ly : null;
     });
     const vals = act.concat(ly).filter(v => v !== null);
@@ -372,7 +392,7 @@
     const rows = rowsFiltradas(), body = $('pvBody');
     if (!rows.length) { body.innerHTML = '<div class="card"><div class="empty">Sin datos para la selección de filtros.</div></div>'; return; }
     const t = total(rows), key = st.metrica;
-    const ref = filtrosActivos() ? null : snapRef(st.periodos);
+    const ref = filtrosActivos() ? null : snapRef(st.ejercicio, st.periodos);
     const g = gm(t);
     let h = '<div class="kpis">' +
       [['Ingresos totales (US$)', money(t.usd)], ['Total cajas 9L', int(t.cajas)], ['Precio prom. / caja (US$)', price(avgPrice(t))], ['Margen bruto %', g === null ? '—' : pct(g)]]
@@ -394,7 +414,7 @@
       if (st.comparar) h += `<td class="n">${hasBud ? d.f(d.bud) : ND}</td>` + varCell(hasBud ? d.act - d.bud : null, d.f);
       h += '</tr>';
     });
-    h += `</tbody></table></div><div class="hint">${ref ? 'LY tomado del SNAP (total Grupo Colomé, mismo período) -- Budget n/d, nunca existió un dato real (ver Sales Performance).' : 'n/d: LY del SNAP existe solo a nivel total Grupo y para P01, P02 o P01–P02 sin filtros.'}</div></div>`;
+    h += `</tbody></table></div><div class="hint">${ref ? 'LY tomado del SNAP (total Grupo Colomé, mismo período) -- Budget n/d, nunca existió un dato real (ver Sales Performance).' : 'n/d: LY del SNAP existe solo a nivel total Grupo, sin filtros activos, y solo para períodos que ya tengan LY real cargado.'}</div></div>`;
     h += `<div class="card chart"><h3>Evolución por período — ${key === 'usd' ? 'Ingresos (US$)' : 'Cajas 9L'}</h3>${evolucionSvg()}</div>`;
     h += `<div class="card chart"><h3>Ventas por país — Ejercicio ${st.ejercicio}</h3>${svgVBars(groupBy(rows, I.pais), r => nombrePropio(D.pais[r.k]))}</div>`;
     h += '<div class="grid2">' +
