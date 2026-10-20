@@ -103,6 +103,28 @@ def _lfy_agregado() -> dict[tuple[str, str], list[float]]:
             _lfy_cache[(periodo, linea)] = v
     return _lfy_cache
 
+
+# Budget real (agregado 2026-10-20, Ezequiel: "subamos tambien esta info del
+# budget") -- `Budget_Dinamico.xlsx`, hoja "Datos" (2.330 filas SKU/mes/
+# canal/mercado del presupuesto de bodega), agregado acá a TOTAL por mes
+# calendario (sin desglose por línea de negocio -- ni el SNAP real de Ariel
+# trae Budget por línea, ver `YTD - Snap - ly.xlsx`, columna "Budget" vacía
+# en TODAS las filas, Total incluido). Validado contra la propia hoja
+# "Control" del archivo (cuadre interno de Ariel): 185.062,75 cajas totales,
+# USD 10.556.951,16 -- exacto. SOLO cubre el ejercicio fiscal 2025-2026
+# (jul-2025 a jun-2026) -- el ejercicio ACTUAL (2026-2027) todavía no tiene
+# Budget real cargado en ningún lado, sigue en "n/d" a propósito (nunca
+# inventar un presupuesto que no existe)."""
+BUDGET_RUTA = Path(__file__).parent / "budget_2025_2026.json"
+_budget_cache: dict[str, list[float]] | None = None
+
+
+def _budget_mensual() -> dict[str, list[float]]:
+    global _budget_cache
+    if _budget_cache is None:
+        _budget_cache = json.loads(BUDGET_RUTA.read_text(encoding="utf-8"))
+    return _budget_cache
+
 DOMESTIC_WHOLESALE = {"DBA", "DCBA", "DNOA"}
 EXPORT = {"EXPORTS"}
 DTC_HOSPITALIDAD = {"DTC", "HOSPITALIDAD"}
@@ -454,20 +476,30 @@ def _ly_mensual() -> list[dict]:
     Ezequiel: "si, asi tenemos todo el ly y empezamos a completar todas
     las hojas"). Un mes sin LY real (ej. jul-2025, que necesitaría
     jul-2024) queda con `usd_ly=None` -- el frontend decide si mostrar
-    "n/d" según qué meses necesite sumar."""
+    "n/d" según qué meses necesite sumar.
+
+    `usd_bud`/`lit_bud` agregados el mismo día con el Budget real del
+    ejercicio 2025-2026 (ver `_budget_mensual`) -- `None` para cualquier
+    mes fuera de ese ejercicio (el actual, 2026-2027, no tiene Budget real
+    todavía)."""
     _, hasta_cerrado = _mes_cerrado_anterior()
+    budget = _budget_mensual()
     out = []
     anio, mes = LFY_DESDE.year, LFY_DESDE.month
     while date(anio, mes, 1) <= hasta_cerrado:
         mes_ini, mes_fin = _rango_mes(anio, mes)
         filas = ventas_sbl(mes_ini, mes_fin)
         tot = next((f for f in filas if f and f["label"] == "TOTAL SALES"), None)
+        periodo = f"{anio:04d}-{mes:02d}"
+        bud = budget.get(periodo)
         out.append({
-            "periodo": f"{anio:04d}-{mes:02d}",
+            "periodo": periodo,
             "usd_act": tot["usd_act"] if tot else 0.0,
             "lit_act": tot["lit_act"] if tot else 0.0,
             "usd_ly": tot["usd_ly"] if tot else None,
             "lit_ly": tot["lit_ly"] if tot else None,
+            "usd_bud": round(bud[0] / 1000, 4) if bud else None,
+            "lit_bud": round(bud[1], 4) if bud else None,
         })
         anio, mes = (anio + 1, 1) if mes == 12 else (anio, mes + 1)
     return out

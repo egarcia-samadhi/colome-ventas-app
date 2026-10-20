@@ -142,9 +142,12 @@
   const rowsSinPeriodo = () => F.filter(f => okEjercicio(f) && okFiltros(f));
   const rowsFiltradas = () => F.filter(f => okEjercicio(f) && st.periodos.has(PER_DATA[f[0]]) && okFiltros(f));
 
-  // ---------- referencia SNAP (LY solo a nivel total Grupo -- Budget sacado
-  // del SNAP en vivo, decisión confirmada 2026-10-09: "nunca existió un dato
-  // real, se saca") ----------
+  // ---------- referencia SNAP (LY/Budget solo a nivel total Grupo) ----------
+  // Budget: decisión original 2026-10-09 ("nunca existió un dato real, se
+  // saca") revertida PARCIALMENTE 2026-10-20 -- Ariel mandó un Budget real
+  // (`Budget_Dinamico.xlsx`), pero SOLO para el ejercicio 2025-2026 (ver
+  // snap.py::_budget_mensual) -- el ejercicio actual (2026-2027) sigue sin
+  // Budget real, sigue en "n/d" ahí a propósito.
   // BUG REAL corregido 2026-10-19: esta función seguía leyendo RAW['sbl_aug']
   // (clave vieja, renombrada a 'sbl_mes' cuando Sales by Line of Business
   // pasó a vivo) y RAW[...].usd_bud/lit_bud (campos que /api/ventas/snap ya
@@ -186,18 +189,35 @@
   // longitud, sería una variación % inflada/falsa) -- `parcial: true`
   // avisa cuando se excluyó el mes en curso, para el hint debajo de la
   // tabla.
+  // TERCER AJUSTE 2026-10-20 (mismo día, Budget real agregado -- Ezequiel:
+  // "subamos tambien esta info del budget"): LY y Budget tienen
+  // disponibilidad INDEPENDIENTE -- jul-ago 2025 tiene Budget real (del
+  // ejercicio 2025-2026) pero NO tiene LY real (necesitaría jul-ago 2024,
+  // que no existe en ningún lado). Filtrar `metas` por "tiene LY" como
+  // antes escondía el Budget de esos meses sin necesidad -- ahora `metas`
+  // es solo "mes ya cerrado" (existe en `ly_mensual`), y LY/Budget se
+  // suman cada uno con su propia condición de "están TODOS los meses
+  // seleccionados disponibles para esa métrica" (si falta uno, esa
+  // métrica puntual da n/d, pero no tira abajo a la otra).
   function snapRef(ejercicio, periodosSel) {
     const dispEj = periodosConDato(ejercicio);
     const seleccionados = PERIODOS.filter(p => periodosSel.has(p) && dispEj.has(p));
-    const metas = seleccionados
-      .map(p => lyMes(periodoACalendario(ejercicio, p)))
-      .filter(m => m && m.usd_ly !== null); // solo meses ya cerrados, con LY real
+    const metas = seleccionados.map(p => lyMes(periodoACalendario(ejercicio, p))).filter(Boolean);
     if (!metas.length) return null;
     const sum = k => metas.reduce((s, m) => s + m[k], 0);
+    const completo = k => metas.every(m => m[k] !== null && m[k] !== undefined);
     return {
       parcial: metas.length < seleccionados.length,
-      usd: { act: sum('usd_act') * 1000, ly: sum('usd_ly') * 1000, bud: null },
-      cajas: { act: sum('lit_act'), ly: sum('lit_ly'), bud: null },
+      usd: {
+        act: sum('usd_act') * 1000,
+        ly: completo('usd_ly') ? sum('usd_ly') * 1000 : null,
+        bud: completo('usd_bud') ? sum('usd_bud') * 1000 : null,
+      },
+      cajas: {
+        act: sum('lit_act'),
+        ly: completo('lit_ly') ? sum('lit_ly') : null,
+        bud: completo('lit_bud') ? sum('lit_bud') : null,
+      },
     };
   }
 
@@ -436,8 +456,8 @@
       h += '</tr>';
     });
     const hintRef = ref
-      ? 'LY tomado del SNAP (total Grupo Colomé)' + (ref.parcial ? ' -- Actual y LY de esta tabla recalculados SOLO sobre los meses ya cerrados de la selección (excluye el mes en curso, todavía sin cerrar)' : ', mismo período') + ' -- Budget n/d, nunca existió un dato real (ver Sales Performance).'
-      : 'n/d: LY del SNAP existe solo a nivel total Grupo, sin filtros activos, y solo para períodos que ya tengan LY real cargado.';
+      ? 'LY/Budget tomados del SNAP (total Grupo Colomé)' + (ref.parcial ? ' -- Actual, LY y Budget de esta tabla recalculados SOLO sobre los meses ya cerrados de la selección (excluye el mes en curso, todavía sin cerrar)' : ', mismo período') + '. Budget real solo existe para el ejercicio 2025-2026 -- "n/d" en el ejercicio actual (2026-2027) a propósito, todavía no se cargó ese presupuesto.'
+      : 'n/d: LY/Budget del SNAP existen solo a nivel total Grupo, sin filtros activos, y solo para períodos que ya tengan ese dato real cargado.';
     h += `</tbody></table></div><div class="hint">${hintRef}</div></div>`;
     h += `<div class="card chart"><h3>Evolución por período — ${key === 'usd' ? 'Ingresos (US$)' : 'Cajas 9L'}</h3>${evolucionSvg()}</div>`;
     h += `<div class="card chart"><h3>Ventas por país — Ejercicio ${st.ejercicio}</h3>${svgVBars(groupBy(rows, I.pais), r => nombrePropio(D.pais[r.k]))}</div>`;
