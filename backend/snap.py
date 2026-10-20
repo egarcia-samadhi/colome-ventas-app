@@ -52,13 +52,56 @@ Last Year: solo se muestra si hay dato real (mismo mes/rango del año
 anterior, posible desde que arrancó el histórico real en 2025-09-01) --
 mismo criterio que Panel de Ventas. Ejercicio fiscal Colomé: julio a junio
 (igual que `public/ventas/app.js`, P01=julio)."""
+import json
 from datetime import date, timedelta
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ig_ventas import _lineas_vinos
 
 router = APIRouter(prefix="/api/ventas", tags=["snap"])
+
+# LY para jul-ago 2025 (agregado 2026-10-20): ese rango es ANTERIOR al
+# histórico real en vivo (`DESDE_HISTORICO` = 2025-09-01, ig_ventas no
+# tiene datos de ahí para atrás), así que el snap no podía mostrar LY para
+# los primeros 2 meses del ejercicio fiscal (P01/P02 = julio/agosto) --
+# Ezequiel: "sigo viendo los 1685 vs 1676" se cerró el día anterior, pero
+# el LY de jul-ago seguía en "n/d". Ariel mandó `LFY.xlsx` (hoja "Base
+# Sistema", export crudo tipo ERP, NO el mismo esquema que ig_ventas) con
+# el real de jul-ago 2025. Pre-agregado por (periodo, línea de negocio) y
+# commiteado como fixture estática -- no es un feed en vivo, es un volcado
+# puntual de un rango que nunca va a cambiar (ya cerrado hace más de un
+# año) y que nunca se va a volver a pedir (no hay otro hueco igual).
+#
+# Clasificación de línea INFERIDA del campo `Centro` (el archivo no trae
+# una columna "línea de negocio" explícita) -- validada cruzando contra 2
+# señales ya confirmadas en producción: 1) `Centro="Expo"` coincide exacto
+# con las ventas a países != Argentina (salvo 4 filas de turistas pagando
+# en el Hotel, correctamente excluidas de Export); 2) `Centro="Hotel"` /
+# `"Visitor Center"` / `"Amalaya WB"` calzan con las reglas YA cargadas en
+# `snap_linea_negocio_mapa` (centro_costo="HOTEL COLOME"→Colome Hotel,
+# "AMALAYA WINE BAR"→Cafayate Visitor Center). NO validada con Ariel
+# todavía -- si en algún momento no cierra contra un número que él
+# confirme, revisar primero esta inferencia antes que el resto del cálculo.
+#
+# El campo `Costo` del archivo viene en ARS (confirmado cruzando contra
+# `tipo de cambio` y el campo `MG2` ya calculado por fila) -- se convirtió
+# a USD dividiendo por el tipo de cambio de cada fila antes de agregar.
+LFY_RUTA = Path(__file__).parent / "lfy_jul_ago_2025.json"
+LFY_DESDE = date(2025, 7, 1)
+_lfy_cache: dict[tuple[str, str], list[float]] | None = None
+
+
+def _lfy_agregado() -> dict[tuple[str, str], list[float]]:
+    global _lfy_cache
+    if _lfy_cache is None:
+        raw = json.loads(LFY_RUTA.read_text(encoding="utf-8"))
+        _lfy_cache = {}
+        for k, v in raw.items():
+            periodo, linea = k.split("|", 1)
+            _lfy_cache[(periodo, linea)] = v
+    return _lfy_cache
 
 DOMESTIC_WHOLESALE = {"DBA", "DCBA", "DNOA"}
 EXPORT = {"EXPORTS"}
@@ -209,8 +252,18 @@ def _fila(label: str, agg: dict[str, list[float]], ly: dict[str, list[float]] | 
 
 
 def _cero(label: str) -> dict:
+    # BUG REAL corregido 2026-10-20: usd_ly=None (no 0.0) hacía que
+    # `_sumar()` tratara a TOTAL SALES TO THIRD PARTIES/TOTAL SALES como
+    # "sin LY" en TODOS los casos (con_ly exige que NINGUNA fila tenga
+    # usd_ly=None) -- aunque Brand/DTC/Sin clasificar sí tuvieran LY real,
+    # bastaba que BOB/Intercompany (fijos en 0, siempre `_cero()`)
+    # contaminaran el chequeo para que los totales de arriba mostraran
+    # "n/d" sin necesidad. BOB/Intercompany son 0 FIJO en CUALQUIER año
+    # (no hay ventas reales bajo esos canales, ver docstring del módulo),
+    # así que 0.0 es un LY tan válido como el actual -- no un "no hay
+    # dato", sino un "el dato real es cero".
     return {"label": label, "usd_act": 0.0, "lit_act": 0.0, "gm_act": "N/A",
-            "usd_ly": None, "lit_ly": None, "usd_vs_ly": "N/A", "lit_vs_ly": "N/A"}
+            "usd_ly": 0.0, "lit_ly": 0.0, "usd_vs_ly": "N/A", "lit_vs_ly": "N/A"}
 
 
 def _sumar(label: str, filas: list[dict]) -> dict:
@@ -233,16 +286,59 @@ def _sumar(label: str, filas: list[dict]) -> dict:
     return out
 
 
+def _meses_en_rango(desde: date, hasta_incl: date) -> list[tuple[int, int]]:
+    out = []
+    anio, mes = desde.year, desde.month
+    while date(anio, mes, 1) <= hasta_incl:
+        out.append((anio, mes))
+        anio, mes = (anio + 1, 1) if mes == 12 else (anio, mes + 1)
+    return out
+
+
+def _agregado_sbl_con_lfy(desde: date, hasta_incl: date) -> dict[str, list[float]]:
+    """Igual que `_agregado_sbl`, pero completa con la fixture LFY (ver
+    arriba) los meses del rango que caen ANTES de `DESDE_HISTORICO`
+    (ig_ventas no tiene datos ahí para atrás). Asume rangos alineados a
+    mes calendario completo -- único patrón que usa `ventas_sbl` (meses
+    cerrados, YTD desde el inicio del ejercicio fiscal), la fixture LFY
+    solo tiene totales mensuales, no permite partir un mes a la mitad."""
+    acc: dict[str, list[float]] = {}
+    lfy = None
+    for anio, mes in _meses_en_rango(desde, hasta_incl):
+        mes_ini = date(anio, mes, 1)
+        mes_fin_excl = date(anio + 1, 1, 1) if mes == 12 else date(anio, mes + 1, 1)
+        mes_fin = mes_fin_excl - timedelta(days=1)
+        d0, d1 = max(mes_ini, desde), min(mes_fin, hasta_incl)
+        if mes_ini < DESDE_HISTORICO:
+            if lfy is None:
+                lfy = _lfy_agregado()
+            periodo = f"{anio:04d}-{mes:02d}"
+            for (p, linea), v in lfy.items():
+                if p != periodo:
+                    continue
+                a = acc.setdefault(linea, [0.0, 0.0, 0.0])
+                for i in range(3):
+                    a[i] += v[i]
+        else:
+            sub = _agregado_sbl(d0, d1)
+            for linea, v in sub.items():
+                a = acc.setdefault(linea, [0.0, 0.0, 0.0])
+                for i in range(3):
+                    a[i] += v[i]
+    return acc
+
+
 def ventas_sbl(desde: date, hasta_incl: date) -> list[dict | None]:
     """Filas de Sales by Line of Business para el rango [desde, hasta_incl].
-    LY se calcula para el mismo rango corrido un año atrás, SOLO si ese
-    rango cae dentro del histórico real (>= 2025-09-01, ver DESDE_HISTORICO
-    más abajo en el archivo)."""
+    LY se calcula para el mismo rango corrido un año atrás, combinando la
+    fixture LFY (jul-ago 2025) con el histórico real en vivo para el resto
+    del rango -- `None` solo si ni siquiera eso alcanza (LY antes de
+    `LFY_DESDE`, 2025-07-01)."""
     agg = _agregado_sbl(desde, hasta_incl)
 
     desde_ly = date(desde.year - 1, desde.month, desde.day)
     hasta_ly = date(hasta_incl.year - 1, hasta_incl.month, hasta_incl.day)
-    ly = _agregado_sbl(desde_ly, hasta_ly) if desde_ly >= DESDE_HISTORICO else None
+    ly = _agregado_sbl_con_lfy(desde_ly, hasta_ly) if desde_ly >= LFY_DESDE else None
 
     domestic = _fila("Grupo Colome Domestic", agg, ly, sin_costeo=True)
     export_ = _fila("Grupo Colome Export", agg, ly, sin_costeo=True)
