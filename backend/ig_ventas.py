@@ -519,7 +519,22 @@ def _lineas_vinos(desde: date, hasta_incl: date):
     Cliente contra el total ARS (correcto) de Panel de Ventas para el
     mismo rango: Por Cliente daba ~14M ARS de más sobre jul-sep 2026. Se
     saca el `signo` del generador -- los consumidores usan los campos tal
-    cual vienen."""
+    cual vienen.
+
+    SEGUNDO BUG REAL corregido 2026-10-20 (Ezequiel: "para los 3 primeros
+    meses la venta dice 1676 vs 1685", snap vs Panel de Ventas tras sacar
+    FdelMotte de los dos lados -- la diferencia de USD 8,63k persistía):
+    este generador no tenía el fix de "corte de fecha no limpio" que
+    `_periodo_de_fila` ya aplicaba para Panel de Ventas/jurisdiccion desde
+    el 2026-10-08 (ver su docstring). Confirmado con el fetch real del
+    30/09/2026: la API devuelve 87 líneas con fecha real 30/09 Y 80 líneas
+    MÁS con fecha real 01/10 (USD 8,625k) -- Panel de Ventas las reubica en
+    octubre vía `_periodo_de_fila`, pero este generador las entregaba todas
+    tal cual venían, inflando el mes pedido con ventas del día siguiente.
+    Se filtra acá por la `fecha` REAL de la fila (nunca el día del loop)
+    para que TODO consumidor de `_lineas_vinos` (snap, Otros Análisis) quede
+    corregido de una sola vez, sin tener que reimplementar el fix por su
+    cuenta."""
     vistos_global = set()
     dia = desde
     while dia <= hasta_incl:
@@ -532,6 +547,13 @@ def _lineas_vinos(desde: date, hasta_incl: date):
                 continue
             if it.get("d_grupo") != GRUPO_VALIDO:
                 continue
+            fecha_real = (it.get("fecha") or "")[:10]
+            if len(fecha_real) == 10:
+                try:
+                    if not (desde <= date.fromisoformat(fecha_real) <= hasta_incl):
+                        continue
+                except ValueError:
+                    pass
             yield it
         dia += timedelta(days=1)
 
