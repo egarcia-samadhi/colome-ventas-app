@@ -394,7 +394,7 @@
       if (st.comparar) h += `<td class="n">${hasBud ? d.f(d.bud) : ND}</td>` + varCell(hasBud ? d.act - d.bud : null, d.f);
       h += '</tr>';
     });
-    h += `</tbody></table></div><div class="hint">${ref ? 'LY tomado del SNAP (total Grupo Colomé, mismo período) -- Budget n/d, nunca existió un dato real (ver Sales Performance).' : 'n/d: LY del SNAP existe solo a nivel total Grupo y para P01, P02 o P01–P02 sin filtros. Redline no tiene datos anteriores a sep-2025.'}</div></div>`;
+    h += `</tbody></table></div><div class="hint">${ref ? 'LY tomado del SNAP (total Grupo Colomé, mismo período) -- Budget n/d, nunca existió un dato real (ver Sales Performance).' : 'n/d: LY del SNAP existe solo a nivel total Grupo y para P01, P02 o P01–P02 sin filtros.'}</div></div>`;
     h += `<div class="card chart"><h3>Evolución por período — ${key === 'usd' ? 'Ingresos (US$)' : 'Cajas 9L'}</h3>${evolucionSvg()}</div>`;
     h += `<div class="card chart"><h3>Ventas por país — Ejercicio ${st.ejercicio}</h3>${svgVBars(groupBy(rows, I.pais), r => nombrePropio(D.pais[r.k]))}</div>`;
     h += '<div class="grid2">' +
