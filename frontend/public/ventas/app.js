@@ -174,15 +174,31 @@
   function lyMes(periodoCrudo) {
     return (RAW.ly_mensual || []).find(m => m.periodo === periodoCrudo) || null;
   }
+  // SEGUNDO AJUSTE 2026-10-20 (mismo día, Ezequiel: "sigo sin verlo" --
+  // la vista default de Panel de Ventas selecciona P01 HASTA el período
+  // EN CURSO (ej. P01-P04 en octubre), y el mes en curso nunca tiene LY
+  // -- ni puede tenerlo, todavía no cerró. Exigir que TODOS los períodos
+  // seleccionados tuvieran LY (como arriba) hacía que un solo mes abierto
+  // tirara todo a "n/d" aunque el resto sí tuviera dato real. Ahora
+  // snapRef() compara SOLO los meses CERRADOS dentro de la selección --
+  // tanto el actual como el LY de esta tabla se recalculan sobre ese
+  // mismo subconjunto (nunca comparar un rango contra otro de distinta
+  // longitud, sería una variación % inflada/falsa) -- `parcial: true`
+  // avisa cuando se excluyó el mes en curso, para el hint debajo de la
+  // tabla.
   function snapRef(ejercicio, periodosSel) {
     const dispEj = periodosConDato(ejercicio);
-    const metas = PERIODOS
-      .filter(p => periodosSel.has(p) && dispEj.has(p))
-      .map(p => lyMes(periodoACalendario(ejercicio, p)));
-    if (!metas.length || metas.some(m => !m || m.usd_ly === null)) return null;
-    const usd_ly = metas.reduce((s, m) => s + m.usd_ly, 0);
-    const lit_ly = metas.reduce((s, m) => s + m.lit_ly, 0);
-    return { usd: { ly: usd_ly * 1000, bud: null }, cajas: { ly: lit_ly, bud: null } };
+    const seleccionados = PERIODOS.filter(p => periodosSel.has(p) && dispEj.has(p));
+    const metas = seleccionados
+      .map(p => lyMes(periodoACalendario(ejercicio, p)))
+      .filter(m => m && m.usd_ly !== null); // solo meses ya cerrados, con LY real
+    if (!metas.length) return null;
+    const sum = k => metas.reduce((s, m) => s + m[k], 0);
+    return {
+      parcial: metas.length < seleccionados.length,
+      usd: { act: sum('usd_act') * 1000, ly: sum('usd_ly') * 1000, bud: null },
+      cajas: { act: sum('lit_act'), ly: sum('lit_ly'), bud: null },
+    };
   }
 
   // ---------- tooltip global (estilo Recharts) ----------
@@ -397,10 +413,15 @@
     let h = '<div class="kpis">' +
       [['Ingresos totales (US$)', money(t.usd)], ['Total cajas 9L', int(t.cajas)], ['Precio prom. / caja (US$)', price(avgPrice(t))], ['Margen bruto %', g === null ? '—' : pct(g)]]
         .map(k => `<div class="kpi"><div class="v">${k[1]}</div><div class="l">${k[0]}</div></div>`).join('') + '</div>';
+    // Si ref existe, "Actual" de ESTA tabla se recalcula sobre el mismo
+    // subconjunto de meses CERRADOS que su LY (ver snapRef) -- nunca el
+    // total de arriba (que puede incluir el mes en curso todavía
+    // abierto), para no comparar rangos de distinta longitud.
+    const actUsd = ref ? ref.usd.act : t.usd, actCajas = ref ? ref.cajas.act : t.cajas;
     const defs = [
-      { nm: 'Ingresos (US$)', act: t.usd, ly: ref && ref.usd.ly, bud: ref && ref.usd.bud, f: money },
-      { nm: 'Cajas 9L', act: t.cajas, ly: ref && ref.cajas.ly, bud: ref && ref.cajas.bud, f: int },
-      { nm: 'Precio prom. / caja (US$)', act: avgPrice(t), ly: ref && ref.usd.ly / ref.cajas.ly, bud: ref && ref.usd.bud / ref.cajas.bud, f: price },
+      { nm: 'Ingresos (US$)', act: actUsd, ly: ref && ref.usd.ly, bud: ref && ref.usd.bud, f: money },
+      { nm: 'Cajas 9L', act: actCajas, ly: ref && ref.cajas.ly, bud: ref && ref.cajas.bud, f: int },
+      { nm: 'Precio prom. / caja (US$)', act: actUsd / actCajas, ly: ref && ref.usd.ly / ref.cajas.ly, bud: ref && ref.usd.bud / ref.cajas.bud, f: price },
     ];
     h += '<div class="card"><h3>Tabla comparativa anual</h3><div class="scroll-x"><table class="tight"><thead><tr><th class="l">Métrica</th><th class="n">Actual</th><th class="n">LY</th><th class="n">Var LY</th><th class="n">% Var LY</th>' +
       (st.comparar ? '<th class="n">Budget</th><th class="n">Var Bud</th>' : '') + '</tr></thead><tbody>';
@@ -414,7 +435,10 @@
       if (st.comparar) h += `<td class="n">${hasBud ? d.f(d.bud) : ND}</td>` + varCell(hasBud ? d.act - d.bud : null, d.f);
       h += '</tr>';
     });
-    h += `</tbody></table></div><div class="hint">${ref ? 'LY tomado del SNAP (total Grupo Colomé, mismo período) -- Budget n/d, nunca existió un dato real (ver Sales Performance).' : 'n/d: LY del SNAP existe solo a nivel total Grupo, sin filtros activos, y solo para períodos que ya tengan LY real cargado.'}</div></div>`;
+    const hintRef = ref
+      ? 'LY tomado del SNAP (total Grupo Colomé)' + (ref.parcial ? ' -- Actual y LY de esta tabla recalculados SOLO sobre los meses ya cerrados de la selección (excluye el mes en curso, todavía sin cerrar)' : ', mismo período') + ' -- Budget n/d, nunca existió un dato real (ver Sales Performance).'
+      : 'n/d: LY del SNAP existe solo a nivel total Grupo, sin filtros activos, y solo para períodos que ya tengan LY real cargado.';
+    h += `</tbody></table></div><div class="hint">${hintRef}</div></div>`;
     h += `<div class="card chart"><h3>Evolución por período — ${key === 'usd' ? 'Ingresos (US$)' : 'Cajas 9L'}</h3>${evolucionSvg()}</div>`;
     h += `<div class="card chart"><h3>Ventas por país — Ejercicio ${st.ejercicio}</h3>${svgVBars(groupBy(rows, I.pais), r => nombrePropio(D.pais[r.k]))}</div>`;
     h += '<div class="grid2">' +
