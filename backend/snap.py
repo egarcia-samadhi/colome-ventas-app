@@ -171,6 +171,76 @@ def _clasificar_dtc(it: dict, reglas: list[dict]) -> str:
     return "Sin clasificar"
 
 
+def _clasificar_leaf(it: dict, reglas: list[dict]) -> str:
+    """Misma partición que usa `_agregado_sbl` (por `d_categoria`, con
+    sub-clasificación DTC/HOSPITALIDAD vía `_clasificar_dtc`), extraída
+    acá como helper compartido para que `desglose_mercado` (ver abajo)
+    clasifique CADA fila con la MISMA regla exacta que arma las líneas del
+    SNAP -- dos implementaciones separadas de la misma partición es
+    exactamente el bug estructural que ya se corrigió una vez en este
+    archivo (ver docstring del módulo, refactor 2026-10-19)."""
+    categoria = it.get("d_categoria") or ""
+    if categoria in DOMESTIC_WHOLESALE:
+        return "Grupo Colome Domestic"
+    if categoria in EXPORT:
+        return "Grupo Colome Export"
+    if categoria in DTC_HOSPITALIDAD:
+        return _clasificar_dtc(it, reglas)
+    return "Sin clasificar"
+
+
+def _label_matches(label: str, it: dict, leaf: str) -> bool:
+    """¿Esta fila entra en el total/línea `label` de Sales by Line of
+    Business? -- usado por `desglose_mercado` (popup "Sales by Market" por
+    línea, pedido explícito de Ezequiel 2026-10-21) para saber qué filas
+    crudas componen cada fila clickeada, incluidas las de total/subtotal."""
+    if label == "Grupo Colome Domestic - AirLines":
+        return leaf == "Grupo Colome Domestic" and it.get("d_canal_venta") == "AEROPUERTOS"
+    if label == "Total Grupo Colome Brand":
+        return leaf in ("Grupo Colome Domestic", "Grupo Colome Export")
+    if label == "Direct-to-consumer Channel":
+        return leaf in DTC_LINEAS_FIJAS
+    if label in ("TOTAL SALES TO THIRD PARTIES", "TOTAL SALES"):
+        return leaf in ("Grupo Colome Domestic", "Grupo Colome Export", "Sin clasificar") or leaf in DTC_LINEAS_FIJAS
+    if label in ("Total Buyers Own Brand (BOB)", "Total Intercompany Sales"):
+        # 0 FIJO -- no hay ninguna fila real bajo Ascension/GC Wines
+        # Uruguay en los 13 meses de histórico (ver docstring del módulo).
+        return False
+    return leaf == label
+
+
+def desglose_mercado(label: str, desde: date, hasta_incl: date) -> list[dict]:
+    """Desglose por mercado (provincia Argentina / Exterior, mismo catálogo
+    ya validado que usa Ventas por Jurisdicción -- jurisdiccion_mapa en
+    Datos Maestros) de las filas que componen una línea/total de Sales by
+    Line of Business. Pedido explícito de Ezequiel 2026-10-21: poder hacer
+    clic en una línea del SNAP y ver el "Sales by Market" correspondiente a
+    ESA línea, en vivo (el Sales by Market mock de ~40 países se había
+    sacado el 2026-10-19 por no estar conectado -- ver ARQUITECTURA.md).
+    Usa la MISMA fuente/filtro que `_agregado_sbl` (`_lineas_vinos`,
+    universo VINOS \\*\\*, FdelMotte excluido) para no divergir del total
+    que ya se ve en la fila."""
+    from jurisdiccion import _mapa_jurisdiccion
+    reglas = _mapa_linea_negocio()
+    mapa_jur = _mapa_jurisdiccion()
+    acc: dict[str, list[float]] = {}
+    for it in _lineas_vinos(desde, hasta_incl):
+        if it.get("d_rubro") == "FDELMOTTE **":
+            continue
+        leaf = _clasificar_leaf(it, reglas)
+        if not _label_matches(label, it, leaf):
+            continue
+        mercado = mapa_jur.get(it.get("n_provincia") or "", "Sin clasificar")
+        usd = float(it.get("valor_venta_mon_alt") or 0)
+        cajas = float(it.get("cantidad_cajas9l") or 0)
+        a = acc.setdefault(mercado, [0.0, 0.0])
+        a[0] += usd
+        a[1] += cajas
+    out = [{"mercado": m, "usd": round(v[0] / 1000, 4), "cajas": round(v[1], 4)} for m, v in acc.items()]
+    out.sort(key=lambda r: -r["usd"])
+    return out
+
+
 def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
     """{linea: [usd, cajas, costo_usd]} para el rango dado.
 
@@ -516,6 +586,21 @@ def require_reader(request: Request):
     if not session:
         raise HTTPException(status_code=401, detail="not authenticated")
     return session
+
+
+@router.get("/snap/mercado")
+async def snap_mercado(
+    label: str,
+    desde: str,
+    hasta: str,
+    user=Depends(require_reader),
+):
+    """Popup "Sales by Market" de una línea puntual de Sales by Line of
+    Business -- `desde`/`hasta` (YYYY-MM-DD) vienen del frontend, que pasa
+    el MISMO rango que ya está mostrando (Monthly o YTD, ver snap.js)."""
+    d0 = date.fromisoformat(desde)
+    d1 = date.fromisoformat(hasta)
+    return {"label": label, "desde": desde, "hasta": hasta, "rows": desglose_mercado(label, d0, d1)}
 
 
 @router.get("/snap")

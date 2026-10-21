@@ -53,7 +53,7 @@ function renderSbl(rows) {
     if (r === null) { html += `<tr class="spacer"><td colspan="8"></td></tr>`; return; }
     const isTotal = SBL_TOTAL_ROWS.has(r.label);
     html += `<tr class="${isTotal ? 'total' : ''}">`;
-    html += td(r.label, 'label');
+    html += td(`<a href="#" class="sbl-link" data-label="${r.label.replace(/"/g, '&quot;')}">${r.label}</a>`, 'label');
     html += td(fmtUsd(r.usd_act));
     html += td(fmtUsd(r.usd_ly));
     html += td(fmtPct(r.usd_vs_ly), pctClass(r.usd_vs_ly));
@@ -93,10 +93,73 @@ function renderStats(period) {
   document.getElementById('statRow').innerHTML = html;
 }
 
+let periodoActivo = 'mes';
+
 function render(period) {
+  periodoActivo = period;
   renderStats(period);
   document.getElementById('sblTable').innerHTML = renderSbl(period === 'mes' ? RAW.sbl_mes : RAW.sbl_ytd);
 }
+
+// ---------- Popup "Sales by Market" por línea (2026-10-21, pedido
+// explícito de Ezequiel: poder hacer clic en una línea de Sales by Line of
+// Business y ver el desglose de esa línea por mercado -- ver
+// backend/snap.py::desglose_mercado). Usa el MISMO rango que la pestaña
+// activa (Monthly: el mes de RAW.periodo completo; YTD: RAW.desde_ytd/
+// RAW.hasta_ytd tal cual los da el backend). ----------
+function rangoActivo() {
+  if (periodoActivo === 'ytd') return { desde: RAW.desde_ytd, hasta: RAW.hasta_ytd };
+  const [y, m] = RAW.periodo.split('-').map(Number);
+  const desde = `${RAW.periodo}-01`;
+  const ultimoDia = new Date(y, m, 0).getDate(); // día 0 del mes siguiente = último día de este mes
+  const hasta = `${RAW.periodo}-${String(ultimoDia).padStart(2, '0')}`;
+  return { desde, hasta };
+}
+
+function cerrarModalMercado() {
+  const m = document.getElementById('sblMercadoModal');
+  if (m) m.remove();
+}
+
+async function abrirModalMercado(label) {
+  cerrarModalMercado();
+  const { desde, hasta } = rangoActivo();
+  const overlay = document.createElement('div');
+  overlay.id = 'sblMercadoModal';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal-box">
+    <div class="modal-head"><h3>${label} — Sales by Market</h3><button type="button" class="modal-close">&times;</button></div>
+    <p class="modal-sub">${desde} a ${hasta}</p>
+    <div class="modal-body"><div class="empty">Cargando…</div></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) cerrarModalMercado(); });
+  overlay.querySelector('.modal-close').addEventListener('click', cerrarModalMercado);
+
+  const r = await fetch(`/api/ventas/snap/mercado?label=${encodeURIComponent(label)}&desde=${desde}&hasta=${hasta}`);
+  if (r.status === 401) { window.location.href = '/'; return; }
+  const data = await r.json();
+  const body = overlay.querySelector('.modal-body');
+  if (!data.rows.length) {
+    body.innerHTML = '<div class="empty">Sin datos para esta línea en el período.</div>';
+    return;
+  }
+  const totalUsd = data.rows.reduce((s, r) => s + r.usd, 0);
+  let html = `<table class="tight"><thead><tr><th>Mercado</th><th>USD 000s</th><th>Cajas 9L</th><th>%</th></tr></thead><tbody>`;
+  data.rows.forEach(row => {
+    html += `<tr><td>${row.mercado}</td><td>${fmtUsd(row.usd)}</td><td>${fmtNum(row.cajas)}</td><td>${totalUsd ? (row.usd / totalUsd * 100).toFixed(1) + '%' : '—'}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  body.innerHTML = html;
+}
+
+document.getElementById('sblTable').addEventListener('click', (e) => {
+  const link = e.target.closest('.sbl-link');
+  if (!link) return;
+  e.preventDefault();
+  abrirModalMercado(link.dataset.label);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarModalMercado(); });
 
 // Pestañas Monthly/YTD (movidas del sidebar al contenido -- pedido
 // explícito de Ezequiel 2026-10-19, "solo exponer sales by line, en dos
