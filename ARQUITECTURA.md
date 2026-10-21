@@ -8,7 +8,7 @@ pill flotante, sidebar oscuro `#2b2d31`, acento dorado/bordó) — ver
 antes, creado 2026-10-19 al cerrar la sesión de Otros Análisis — ver norma
 de trabajo "Actualizar ARQUITECTURA.md al cerrar").
 
-Última actualización: 2026-10-21 (precalentamiento del mes en curso + filtro previo "Agrupante de Canal").
+Última actualización: 2026-10-21 (precalentamiento del mes en curso + filtro previo "Agrupante de Canal" + popup "Sales by Market" por línea del SNAP).
 
 ## Estructura
 
@@ -486,6 +486,49 @@ Canal detallado, que sigue existiendo igual.
 
 Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_agrupante_canal`.
+
+## Sales by Line of Business -> popup "Sales by Market" por línea (agregado 2026-10-21)
+
+Pedido explícito de Ezequiel: poder hacer clic en una línea de Sales by
+Line of Business (ej. "Colome Hotel") y ver un popup con el desglose de
+ESA línea por mercado, en vivo -- reemplaza conceptualmente la vieja hoja
+"Sales by Market" mock (~40 países, sacada el 2026-10-19 por no estar
+conectada, ver sección de arriba), pero NO es una reactivación de esa
+tabla: es un desglose nuevo, por línea, construido desde cero.
+
+- **Granularidad de "mercado":** NO países sueltos como el mock viejo --
+  se decidió reusar el catálogo YA VALIDADO de `jurisdiccion_mapa` (mismo
+  que arma "Ventas por Jurisdicción" en Ctrl AFIP): provincia argentina
+  real, o "Exterior" agregado para todo el resto. Evita construir una
+  segunda fuente de verdad geográfica.
+- **Backend (`snap.py`):**
+  - `_clasificar_leaf(it, reglas)`: extraído de la partición que ya usaba
+    `_agregado_sbl` (por `d_categoria`, sub-clasificando DTC/HOSPITALIDAD
+    vía `_clasificar_dtc`) -- mismo criterio que el refactor 2026-10-19
+    (una sola fuente de clasificación, nunca dos implementaciones
+    paralelas que puedan divergir).
+  - `_label_matches(label, it, leaf)`: dado el label de una fila/total del
+    SNAP, dice si una fila cruda entra ahí -- soporta tanto líneas hoja
+    (Colome Hotel, Grupo Colome Export, etc.) como totales/subtotales
+    (Direct-to-consumer Channel, TOTAL SALES TO THIRD PARTIES, TOTAL
+    SALES, Total Grupo Colome Brand) agregando los leaves que los
+    componen. BOB/Intercompany devuelven siempre `False` (0 fijo, sin
+    filas reales, ver docstring del módulo).
+  - `desglose_mercado(label, desde, hasta_incl)`: recorre `_lineas_vinos`
+    (misma fuente que `_agregado_sbl`, FdelMotte excluido) y agrega por
+    `jurisdiccion._mapa_jurisdiccion()` las filas que matchean el label.
+  - Endpoint `GET /api/ventas/snap/mercado?label=...&desde=...&hasta=...`.
+- **Frontend (`snap.js`):** cada fila de la tabla SBL es un link
+  (`.sbl-link`, clase nueva en `ventas.css`) que abre un modal (`.modal-
+  overlay`/`.modal-box`, CSS nuevo, mismo lenguaje visual que el resto)
+  con el desglose. El rango que se pide (`desde`/`hasta`) es SIEMPRE el
+  de la pestaña activa (Monthly: el mes completo de `RAW.periodo`; YTD:
+  `RAW.desde_ytd`/`RAW.hasta_ytd` tal cual los da el backend) -- pedido
+  explícito de Ezequiel: el popup tiene que respetar qué período se está
+  mirando, no un rango fijo.
+
+Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_sales_by_market_popup`.
 
 ## Deploy
 
