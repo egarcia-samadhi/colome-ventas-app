@@ -197,6 +197,34 @@ def neto_y_cae_por_comprobante(desde: date, hasta_incl: date) -> dict[str, dict]
     return por_cae
 
 
+def canales_sin_agrupante(desde: date, hasta_incl: date, mapa: dict[str, str]) -> list[dict]:
+    """Cuenta filas por `d_canal_venta` (universo GRUPO_VALIDO, mismo
+    alcance que Panel de Ventas, donde vive el filtro de Canal) que no
+    tienen entrada en canal_agrupante_mapa (Datos Maestros) -- control
+    "Canales sin agrupante" (ver controles.py), mismo patrón que
+    neto_por_jurisdiccion/combos_sin_clasificar: si aparece un canal nuevo
+    en Redline, tiene que saltar acá para que el admin lo clasifique."""
+    conteo: dict[str, int] = {}
+    vistos_global = set()
+    dia = desde
+    while dia <= hasta_incl:
+        for it in _fetch_dia(dia):
+            key = (it.get("id"), it.get("det_id"))
+            if key in vistos_global:
+                continue
+            vistos_global.add(key)
+            if it.get("d_tipo_compro") not in TIPOS_VALIDOS:
+                continue
+            if it.get("d_grupo") != GRUPO_VALIDO:
+                continue
+            canal = (it.get("d_canal_venta") or "").strip()
+            if not canal or canal in mapa:
+                continue
+            conteo[canal] = conteo.get(canal, 0) + 1
+        dia += timedelta(days=1)
+    return [{"canal_venta": c, "filas": n} for c, n in sorted(conteo.items(), key=lambda x: -x[1])]
+
+
 def neto_por_jurisdiccion(desde: date, hasta_incl: date) -> list[dict]:
     """Ventas por periodo (mes calendario) + provincia del comprobante
     (`n_provincia`, la provincia de IIBB real no existe como campo separado

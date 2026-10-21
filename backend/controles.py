@@ -16,7 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from afip import calcular_cruce
 from database import get_db
-from ig_ventas import neto_por_jurisdiccion
+from datos_maestros import get_canal_agrupante_map
+from ig_ventas import canales_sin_agrupante, neto_por_jurisdiccion
 from jurisdiccion import _mapa_jurisdiccion
 from snap import combos_sin_clasificar
 
@@ -88,6 +89,13 @@ async def controles(admin=Depends(require_admin)):
     # tiene que saltar en controles" (mismo patrón que jurisdicciones).
     combos_sbl = combos_sin_clasificar(desde, hasta_incl)
 
+    # Control 4: Canales sin agrupante -- pedido explícito de Ariel Culasso
+    # vía Ezequiel 2026-10-21, mismo criterio que jurisdicción/SBL: un canal
+    # de d_canal_venta que no está en Datos Maestros -> Agrupante de Canal
+    # no entra en ningún agrupante del filtro previo de Panel de Ventas.
+    mapa_canal = get_canal_agrupante_map()
+    sin_agrupante = canales_sin_agrupante(desde, hasta_incl, mapa_canal)
+
     controles_lista = [
         {
             "id": "cruce_afip",
@@ -129,6 +137,17 @@ async def controles(admin=Depends(require_admin)):
                     "canal_venta": c["canal_venta"],
                 }
                 for c in combos_sbl[:15]
+            ],
+        },
+        {
+            "id": "canal_sin_agrupante",
+            "label": "Canales sin agrupante",
+            "descripcion": f"Busca valores de Canal de Venta ({desde.isoformat()} a {hasta_incl.isoformat()}) que no están cargados en Datos Maestros → Agrupante de Canal -- esas ventas no entran en ningún agrupante del filtro previo de Panel de Ventas / Ventas por Región.",
+            "ok": not sin_agrupante,
+            "cantidad": len(sin_agrupante),
+            "items": [
+                {"valor": r["canal_venta"], "filas": r["filas"]}
+                for r in sin_agrupante[:15]
             ],
         },
     ]

@@ -122,6 +122,21 @@
     { key: 'pais', label: 'País', dim: 'pais' },
   ];
   const DIMS_DESGLOSE = [['cliente', 'Cliente'], ['brand', 'Brand'], ['producto', 'Producto'], ['pais', 'País'], ['canal', 'Canal'], ['zona', 'Región']];
+  // Agrupante de Canal (2026-10-21, pedido de Ariel Culasso vía Ezequiel):
+  // filtro previo de conveniencia que tilda de una el conjunto de canales
+  // crudos de un agrupante (Vinotecas, Distribuidores, etc.) -- SIN
+  // reemplazar el filtro de Canal existente, que sigue intacto. El mapeo
+  // sale de dims.canal_agrupante (paralelo a dims.canal, cargado desde
+  // Datos Maestros -> canal_agrupante_mapa, ver panel_ventas.py).
+  const AGRUPANTE_POR_CANAL = D.canal_agrupante || [];
+  const CANALES_POR_AGRUPANTE = new Map();
+  D.canal.forEach((_, i) => {
+    const ag = AGRUPANTE_POR_CANAL[i] || 'Sin agrupar';
+    if (!CANALES_POR_AGRUPANTE.has(ag)) CANALES_POR_AGRUPANTE.set(ag, []);
+    CANALES_POR_AGRUPANTE.get(ag).push(i);
+  });
+  const AGRUPANTES_ORDEN = [...CANALES_POR_AGRUPANTE.keys()].sort((a, b) =>
+    a === 'Sin agrupar' ? 1 : b === 'Sin agrupar' ? -1 : a.localeCompare(b, 'es'));
   // FdelMotte: marca presente en ig_ventas (dim "brand" = d_rubro) pero
   // ausente del Excel real de "Ventas" que usa la empresa (ver
   // ig_ventas.py) -- confirmado por Ariel Culasso 2026-10-09: va separada,
@@ -263,6 +278,15 @@
       '</select></div>';
     h += '<div class="fs"><span class="fl">Período</span><div id="pvPeriodos"></div></div>';
     FILTROS.forEach(fl => {
+      if (fl.key === 'canal') {
+        h += '<div class="fs"><span class="fl">Agrupante de Canal</span><div class="fl-list">';
+        AGRUPANTES_ORDEN.forEach(ag => {
+          const idxs = CANALES_POR_AGRUPANTE.get(ag);
+          const todas = idxs.every(i => st.canal.has(i));
+          h += `<label class="chip"><input type="checkbox" data-ag="${esc(ag)}"${todas ? ' checked' : ''}>${esc(ag)}</label>`;
+        });
+        h += '</div></div>';
+      }
       h += `<div class="fs"><span class="fl">${fl.label}</span><div class="fl-list">`;
       optionsFor(fl.dim).forEach(o => { h += `<label class="chip"><input type="checkbox" data-f="${fl.key}" data-v="${o.i}"${st[fl.key].has(o.i) ? ' checked' : ''}>${esc(o.label)}</label>`; });
       h += '</div></div>';
@@ -646,6 +670,12 @@
     const t = e.target;
     if (t.dataset.p) { if (t.checked) st.periodos.add(t.dataset.p); else st.periodos.delete(t.dataset.p); }
     else if (t.dataset.f) { const s = st[t.dataset.f], v = Number(t.dataset.v); if (t.checked) s.add(v); else s.delete(v); }
+    else if (t.dataset.ag) {
+      const idxs = CANALES_POR_AGRUPANTE.get(t.dataset.ag) || [];
+      if (t.checked) idxs.forEach(i => st.canal.add(i)); else idxs.forEach(i => st.canal.delete(i));
+      buildSidebar();
+      renderPeriodoChips();
+    }
     else if (t.id === 'pvBud') { st.comparar = t.checked; }
     else if (t.id === 'pvEjercicio') {
       st.ejercicio = t.value;
@@ -659,6 +689,7 @@
     FILTROS.forEach(f => { st[f.key].clear(); if (f.key === 'brand') DEFAULT_BRAND.forEach(i => st.brand.add(i)); });
     st.periodos = periodosConDato(st.ejercicio);
     side.querySelectorAll('input[data-f]').forEach(i => { i.checked = st[i.dataset.f].has(Number(i.dataset.v)); });
+    side.querySelectorAll('input[data-ag]').forEach(i => { i.checked = false; });
     renderPeriodoChips();
     refresh();
   });

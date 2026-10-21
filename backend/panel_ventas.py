@@ -20,6 +20,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from datos_maestros import get_canal_agrupante_map
 from ig_ventas import facts_panel_ventas
 
 router = APIRouter(prefix="/api/ventas", tags=["panel"])
@@ -38,4 +39,11 @@ def require_reader(request: Request):
 @router.get("/panel")
 async def panel_ventas(user=Depends(require_reader)):
     hoy = date.today()
-    return facts_panel_ventas(DESDE_HISTORICO, hoy)
+    data = facts_panel_ventas(DESDE_HISTORICO, hoy)
+    # Filtro previo "Agrupante de Canal" (2026-10-21, pedido de Ariel
+    # Culasso): paralelo a dims["canal"], mismo índice -- el frontend lo usa
+    # para armar un filtro de conveniencia que tilda de una el conjunto de
+    # canales de un agrupante, sin reemplazar el filtro de Canal existente.
+    mapa = get_canal_agrupante_map()
+    data["dims"]["canal_agrupante"] = [mapa.get(c, "Sin agrupar") for c in data["dims"]["canal"]]
+    return data

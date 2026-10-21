@@ -173,3 +173,75 @@ async def borrar_snap_linea_negocio(id: int, admin=Depends(require_admin)):
     if not borrado:
         raise HTTPException(status_code=404, detail=f"No existe la regla id={id}")
     return {"ok": True}
+
+
+# Panel de Ventas -> filtro previo "Agrupante de Canal": pedido explícito de
+# Ariel Culasso vía Ezequiel 2026-10-21 -- agrupar los 18 valores crudos de
+# canal_venta en un filtro previo (Vinotecas, Distribuidores, etc.) SIN
+# sacar el filtro de Canal existente (ver canal_agrupante_mapa en
+# database.py y el uso en panel_ventas.py/controles.py).
+def get_canal_agrupante_map() -> dict[str, str]:
+    conn = get_db()
+    rows = conn.execute("SELECT canal_venta, agrupante FROM canal_agrupante_mapa").fetchall()
+    conn.close()
+    return {r["canal_venta"]: r["agrupante"] for r in rows}
+
+
+@router.get("/canal-agrupante")
+async def listar_canal_agrupante(user=Depends(require_reader)):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT canal_venta, agrupante FROM canal_agrupante_mapa ORDER BY agrupante, canal_venta"
+    ).fetchall()
+    conn.close()
+    return {"rows": [dict(r) for r in rows]}
+
+
+@router.post("/canal-agrupante")
+async def agregar_canal_agrupante(body: dict, admin=Depends(require_admin)):
+    canal_venta = (body.get("canal_venta") or "").strip()
+    agrupante = (body.get("agrupante") or "").strip()
+    if not canal_venta or not agrupante:
+        raise HTTPException(status_code=400, detail="canal_venta y agrupante no pueden estar vacíos")
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO canal_agrupante_mapa (canal_venta, agrupante) VALUES (?, ?)",
+            (canal_venta, agrupante),
+        )
+        conn.commit()
+    except Exception:
+        conn.close()
+        raise HTTPException(status_code=409, detail=f"'{canal_venta}' ya existe en la tabla")
+    conn.close()
+    return {"ok": True}
+
+
+@router.put("/canal-agrupante/{canal_venta}")
+async def editar_canal_agrupante(canal_venta: str, body: dict, admin=Depends(require_admin)):
+    agrupante = (body.get("agrupante") or "").strip()
+    if not agrupante:
+        raise HTTPException(status_code=400, detail="agrupante no puede estar vacío")
+    conn = get_db()
+    cur = conn.execute(
+        "UPDATE canal_agrupante_mapa SET agrupante = ? WHERE canal_venta = ?",
+        (agrupante, canal_venta),
+    )
+    conn.commit()
+    actualizado = cur.rowcount > 0
+    conn.close()
+    if not actualizado:
+        raise HTTPException(status_code=404, detail=f"No existe el canal '{canal_venta}' en el mapa de agrupantes")
+    return {"ok": True}
+
+
+@router.delete("/canal-agrupante/{canal_venta}")
+async def borrar_canal_agrupante(canal_venta: str, admin=Depends(require_admin)):
+    conn = get_db()
+    cur = conn.execute("DELETE FROM canal_agrupante_mapa WHERE canal_venta = ?", (canal_venta,))
+    conn.commit()
+    borrado = cur.rowcount > 0
+    conn.close()
+    if not borrado:
+        raise HTTPException(status_code=404, detail=f"No existe el canal '{canal_venta}' en el mapa de agrupantes")
+    return {"ok": True}

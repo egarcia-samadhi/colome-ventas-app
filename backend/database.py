@@ -68,6 +68,21 @@ def init_db():
             linea_negocio TEXT NOT NULL
         )
     """)
+    # Panel de Ventas -> filtro previo de Canal: pedido explícito de Ariel
+    # Culasso (vía Ezequiel 2026-10-21), "agrupemos en un filtro previo...
+    # sin sacar hoy el filtro de canal" -- el filtro de Canal (18 valores
+    # crudos de d_canal_venta) sigue existiendo tal cual, este agrupante es
+    # SOLO una capa de conveniencia arriba, para tildar de una el conjunto
+    # de canales de "Vinotecas", "Distribuidores", etc. Catálogo fijo
+    # editable a mano desde Datos Maestros, mismo criterio que
+    # jurisdiccion_mapa (1 canal_venta -> 1 agrupante, sin reglas por
+    # combinación como snap_linea_negocio_mapa).
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS canal_agrupante_mapa (
+            canal_venta TEXT PRIMARY KEY,
+            agrupante TEXT NOT NULL
+        )
+    """)
     conn.commit()
 
     # Semilla fija (2026-10-07, pedido explícito de Ezequiel: "tiene que ser
@@ -107,6 +122,39 @@ def init_db():
         conn.executemany(
             "INSERT INTO snap_linea_negocio_mapa (centro_costo, categoria, canal_venta, linea_negocio) VALUES (?, ?, ?, ?)",
             reglas,
+        )
+        conn.commit()
+
+    # Semilla de canal_agrupante_mapa -- propuesta de agrupación armada
+    # 2026-10-21 en base a los 18 valores reales de d_canal_venta vistos en
+    # ig_ventas, validada con Ezequiel antes de cargarla. El admin agrega
+    # canales nuevos a mano desde Datos Maestros a medida que aparezcan
+    # (ver control "Canales sin agrupante" en Controles).
+    (cantidad,) = conn.execute("SELECT COUNT(*) FROM canal_agrupante_mapa").fetchone()
+    if cantidad == 0:
+        canales = [
+            ("VINOTECAS", "Vinotecas"),
+            ("CADENA DE VINOTECAS", "Vinotecas"),
+            ("VINOTECAS ON LINE", "Vinotecas"),
+            ("DISTRIBUIDOR MIXTO", "Distribuidores"),
+            ("DISTRIBUIDOR ON TRADE", "Distribuidores"),
+            ("DISTRIBUIDOR OFF TRADE", "Distribuidores"),
+            ("AMALAYA WINE BAR", "Gastronomía / Hospitality"),
+            ("RESTAURANT A", "Gastronomía / Hospitality"),
+            ("RESTAURANT B", "Gastronomía / Hospitality"),
+            ("HOTELES", "Gastronomía / Hospitality"),
+            ("ESTANCIA COLOME", "Gastronomía / Hospitality"),
+            ("CADENAS NACIONALES", "Retail masivo"),
+            ("CADENAS REGIONALES", "Retail masivo"),
+            ("AUTOSERVICIOS / SUPERMERCADOS", "Retail masivo"),
+            ("ECOMMERCE", "Ecommerce"),
+            ("AEROPUERTOS", "Aeropuertos"),
+            ("VENTA AL PERSONAL", "Venta directa / interna"),
+            ("VENTAS COORPORATIVAS", "Venta directa / interna"),
+        ]
+        conn.executemany(
+            "INSERT INTO canal_agrupante_mapa (canal_venta, agrupante) VALUES (?, ?)",
+            canales,
         )
         conn.commit()
     conn.close()

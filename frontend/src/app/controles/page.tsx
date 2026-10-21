@@ -108,12 +108,60 @@ function CorregirJurisdiccionModal({ valorApi, onClose, onSaved }: { valorApi: s
   );
 }
 
+function CorregirCanalAgrupanteModal({ canalVenta, onClose, onSaved }: { canalVenta: string; onClose: () => void; onSaved: () => void }) {
+  const [agrupante, setAgrupante] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const guardar = async () => {
+    setGuardando(true);
+    setError(null);
+    const r = await fetch("/api/datos-maestros/canal-agrupante", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ canal_venta: canalVenta, agrupante }),
+    });
+    setGuardando(false);
+    if (r.ok) { onSaved(); onClose(); } else {
+      const d = await r.json().catch(() => null);
+      setError(d?.detail || "No se pudo guardar");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white rounded-md p-5 w-[420px]" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-sm font-semibold text-[#1c1811] mb-3">Asignar agrupante a &quot;{canalVenta}&quot;</h3>
+        <label className="block text-[11px] text-[#847c68] mb-1">Agrupante</label>
+        <input
+          value={agrupante}
+          onChange={(e) => setAgrupante(e.target.value)}
+          placeholder="ej. Vinotecas"
+          className="w-full border border-[#ece6d8] rounded px-2 py-1.5 text-sm mb-3"
+        />
+        {error && <p className="text-[11px] text-[#c9772c] mb-2">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="text-[11px] text-[#847c68] hover:text-[#5a5342] px-3 py-1.5">Cancelar</button>
+          <button
+            onClick={guardar}
+            disabled={guardando || !agrupante.trim()}
+            className="px-3 py-1.5 rounded-full text-xs font-medium bg-[#7D4E5B] text-white hover:bg-[#9F6375] transition disabled:opacity-50"
+          >
+            {guardando ? "Guardando…" : "Guardar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ControlesPage() {
   const [data, setData] = useState<ControlesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandido, setExpandido] = useState<string | null>(null);
   const [corrigiendo, setCorrigiendo] = useState<string | null>(null);
+  const [corrigiendoCanal, setCorrigiendoCanal] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -190,7 +238,7 @@ export default function ControlesPage() {
                           <tr className="text-[#847c68] uppercase tracking-wide text-[10px]">
                             <th className="text-left py-1">Valor sin mapear</th>
                             <th className="text-right py-1">Filas afectadas</th>
-                            {(c.id === "jurisdiccion_sin_clasificar" || c.id === "sbl_sin_clasificar") && <th className="w-20" />}
+                            {(c.id === "jurisdiccion_sin_clasificar" || c.id === "sbl_sin_clasificar" || c.id === "canal_sin_agrupante") && <th className="w-20" />}
                           </tr>
                         </thead>
                         <tbody>
@@ -218,6 +266,16 @@ export default function ControlesPage() {
                                   </a>
                                 </td>
                               )}
+                              {c.id === "canal_sin_agrupante" && (
+                                <td className="py-1.5 text-right">
+                                  <button
+                                    onClick={() => setCorrigiendoCanal(it.valor)}
+                                    className="text-[11px] text-[#7D4E5B] hover:text-[#9F6375] underline"
+                                  >
+                                    Corregir
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           ))}
                         </tbody>
@@ -238,6 +296,13 @@ export default function ControlesPage() {
         <CorregirJurisdiccionModal
           valorApi={corrigiendo}
           onClose={() => setCorrigiendo(null)}
+          onSaved={load}
+        />
+      )}
+      {corrigiendoCanal && (
+        <CorregirCanalAgrupanteModal
+          canalVenta={corrigiendoCanal}
+          onClose={() => setCorrigiendoCanal(null)}
           onSaved={load}
         />
       )}
