@@ -8,7 +8,7 @@ pill flotante, sidebar oscuro `#2b2d31`, acento dorado/bordó) — ver
 antes, creado 2026-10-19 al cerrar la sesión de Otros Análisis — ver norma
 de trabajo "Actualizar ARQUITECTURA.md al cerrar").
 
-Última actualización: 2026-10-20 (fix de corte de fecha en `_lineas_vinos`, residuo 1676 vs 1685 cerrado).
+Última actualización: 2026-10-21 (precalentamiento del mes en curso + filtro previo "Agrupante de Canal").
 
 ## Estructura
 
@@ -418,6 +418,74 @@ sumar cualquier combinación de períodos tildados en el sidebar -- antes
 
 Detalle completo en memoria de Claude,
 `proyecto_colome_sales_performance_en_vivo`.
+
+## Performance -- precalentamiento del mes en curso (agregado 2026-10-21)
+
+`ig_ventas.py::_fetch_dia()` cachea para siempre los días de meses YA
+CERRADOS, pero los del mes EN CURSO solo tienen un TTL corto
+(`TTL_MES_EN_CURSO`, 6hs) -- necesario porque el ERP puede seguir cargando
+comprobantes tarde hasta que el mes cierre. Esto significa que, cada vez
+que ese TTL vence, la PRIMERA persona que entra a Panel de Ventas después
+dispara un refetch SECUENCIAL a la API externa de todos los días
+transcurridos del mes (medido 2026-10-21: ~20 días, ~2-3s cada uno, ~45s
+total bloqueando esa carga). Reportado por Ezequiel como "al entrar por
+primera vez, sigue tardando bastante".
+
+**Fix:** cron nuevo en el VPS (NO en git, mismo patrón que
+`precalentar_mes_cerrado.sh`): `crontab` de `root`,
+`0 */5 * * * /root/colome-ventas-build/precalentar_mes_actual.sh` --
+cada 5hs (antes de que venza el TTL de 6hs) llama a
+`facts_panel_ventas(DESDE_HISTORICO, hoy)` dentro del contenedor vía
+`docker cp` + `docker exec`, dejando el cache del mes en curso siempre
+tibio. Ningún usuario real vuelve a pagar el refetch en vivo. Scripts:
+`/root/colome-ventas-build/precalentar_mes_actual.sh` y `.py` (junto a
+`precalentar_mes_cerrado.*`, mismo criterio: tooling del VPS, no
+commiteado al repo).
+
+## Panel de Ventas -> filtro previo "Agrupante de Canal" (agregado 2026-10-21)
+
+Pedido explícito de Ariel Culasso vía Ezequiel: el filtro de Canal (18
+valores crudos de `d_canal_venta`) tiene demasiados campos para uso diario
+-- se agrega un filtro PREVIO que agrupa esos 18 valores en 7 agrupantes
+(Vinotecas, Distribuidores, Gastronomía / Hospitality, Retail masivo,
+Ecommerce, Aeropuertos, Venta directa / interna), SIN sacar el filtro de
+Canal detallado, que sigue existiendo igual.
+
+- **Catálogo:** `canal_agrupante_mapa` (`database.py`) -- 1 `canal_venta`
+  -> 1 `agrupante`, catálogo fijo editable a mano desde Datos Maestros
+  (mismo criterio que `jurisdiccion_mapa`, no auto-sincronizado). Sembrado
+  con la propuesta de 7 agrupantes validada por Ezequiel 2026-10-21 sobre
+  los 18 valores reales vistos en ig_ventas ese día -- un canal nuevo que
+  aparezca después no se auto-clasifica, hay que cargarlo a mano (ver
+  control de integridad abajo).
+- **Backend:** `panel_ventas.py::panel_ventas()` agrega
+  `dims["canal_agrupante"]` a la respuesta de `/api/ventas/panel` --
+  array PARALELO a `dims["canal"]` (mismo índice), con el agrupante de
+  cada canal o `"Sin agrupar"` si no está en el mapa. `ig_ventas.py` en sí
+  no se tocó -- el agrupante es una capa de presentación encima del dato
+  crudo, no cambia DIMS_PANEL/facts.
+- **Frontend (`app.js`):** sidebar agrega una sección "Agrupante de
+  Canal" ARRIBA de "Canal" -- tildar un agrupante agrega/saca de una todos
+  los índices de canal de ese grupo en `st.canal` (el mismo Set que ya usa
+  el filtro de Canal) y rebuildea el sidebar (`buildSidebar()` +
+  `renderPeriodoChips()`) para reflejar el estado. Es un atajo de
+  conveniencia puramente de UI, no un dato nuevo -- no hay sincronía
+  inversa automática (si el usuario tilda canales sueltos a mano, el chip
+  del agrupante no se recalcula hasta el próximo rebuild del sidebar,
+  aceptado como limitación menor).
+- **Datos Maestros:** nueva pestaña "Agrupante de Canal"
+  (`frontend/src/app/datos-maestros/page.tsx::CanalAgrupanteMapa`), alta/
+  edición/baja, mismo patrón visual que Jurisdicción.
+- **Controles:** 4to chequeo `canal_sin_agrupante`
+  (`ig_ventas.py::canales_sin_agrupante()` + `controles.py`) -- cuenta
+  filas de GRUPO_VALIDO ("VINOS \*\*", mismo universo que Panel de Ventas)
+  con `d_canal_venta` que no está en `canal_agrupante_mapa`. Botón
+  "Corregir" abre modal inline (POST directo, sin deep-link a otra
+  pestaña, porque es un mapeo de 1 solo campo -- mismo patrón que
+  Jurisdicción, no el de SBL que necesita 3 campos).
+
+Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_agrupante_canal`.
 
 ## Deploy
 
