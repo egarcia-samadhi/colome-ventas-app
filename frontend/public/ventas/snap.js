@@ -145,11 +145,29 @@ async function abrirModalMercado(label) {
     return;
   }
   const totalUsd = data.rows.reduce((s, r) => s + r.usd, 0);
-  let html = `<table class="tight"><thead><tr><th>Mercado</th><th>USD 000s</th><th>Cajas 9L</th><th>%</th></tr></thead><tbody>`;
-  data.rows.forEach(row => {
-    html += `<tr><td>${row.mercado}</td><td>${fmtUsd(row.usd)}</td><td>${fmtNum(row.cajas)}</td><td>${totalUsd ? (row.usd / totalUsd * 100).toFixed(1) + '%' : '—'}</td></tr>`;
+  const totalCajas = data.rows.reduce((s, r) => s + r.cajas, 0);
+  const rowsOrdenadas = [...data.rows].sort((a, b) => b.usd - a.usd);
+  let html = `<table class="tight mkt-table"><thead><tr>
+    <th class="l">Mercado</th><th>USD 000s</th><th>Cajas 9L</th><th>% del total</th>
+  </tr></thead><tbody>`;
+  rowsOrdenadas.forEach(row => {
+    const pct = totalUsd ? row.usd / totalUsd * 100 : 0;
+    html += `<tr>
+      <td class="label">${row.mercado}</td>
+      <td>${fmtUsd(row.usd)}</td>
+      <td>${fmtNum(row.cajas)}</td>
+      <td class="mkt-pct-cell">
+        <div class="mkt-bar"><div class="mkt-bar-fill" style="width:${pct.toFixed(1)}%"></div></div>
+        <span class="mkt-pct-val">${totalUsd ? pct.toFixed(1) + '%' : '—'}</span>
+      </td>
+    </tr>`;
   });
-  html += '</tbody></table>';
+  html += `</tbody><tfoot><tr class="total">
+    <td class="label">TOTAL</td>
+    <td>${fmtUsd(totalUsd)}</td>
+    <td>${fmtNum(totalCajas)}</td>
+    <td class="mkt-pct-cell"><span class="mkt-pct-val">100%</span></td>
+  </tr></tfoot></table>`;
   body.innerHTML = html;
 }
 
