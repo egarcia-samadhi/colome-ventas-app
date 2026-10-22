@@ -151,6 +151,9 @@
   .mkt-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--gold), var(--gold-d)); }
   .mkt-pct-val { font-variant-numeric: tabular-nums; min-width: 38px; text-align: right; }
   .mkt-table tfoot tr.total .mkt-bar { display: none; }
+  .mkt-table thead th { background: linear-gradient(180deg, #f3e9d3, #ede0c2); color: var(--gold-d); border-bottom: 2px solid var(--gold-d); }
+  .mkt-table thead th:first-child { border-radius: 8px 0 0 0; }
+  .mkt-table thead th:last-child { border-radius: 0 8px 0 0; }
 
   /* tablas */
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
