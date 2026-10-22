@@ -9,18 +9,24 @@
             <button type="button" data-period="mes" class="active">Monthly</button>
             <button type="button" data-period="ytd">YTD</button>
           </div>
-          <div class="stat-row" id="statRow"></div>
+          <div class="stat-row"></div>
           <section class="panel">
             <h2>Sales by Line of Business</h2>
             <div class="panel-sub">Valores de venta en USD (000s) y equivalente 9 litros. Actual vs. Last Year.</div>
-            <div id="sblTable"></div>
+            <div class="sbl-table-mount"></div>
           </section>
         </div>
         <div id="snapFdelMotte" hidden>
-          <div class="bar-top">
-            <span class="pill">Ejercicio Fiscal en curso — datos en vivo (ig_ventas)</span>
+          <div class="seg period-toggle" role="radiogroup" aria-label="Período" style="margin-bottom:14px">
+            <button type="button" data-period="mes" class="active">Monthly</button>
+            <button type="button" data-period="ytd">YTD</button>
           </div>
-          <div id="fmBody"><div class="empty">Cargando datos en vivo…</div></div>
+          <div class="stat-row"></div>
+          <section class="panel">
+            <h2>Sales by Line of Business — FdelMotte</h2>
+            <div class="panel-sub">Valores de venta en USD (000s) y equivalente 9 litros. Actual vs. Last Year.</div>
+            <div class="sbl-table-mount"></div>
+          </section>
         </div>
       </div>
 

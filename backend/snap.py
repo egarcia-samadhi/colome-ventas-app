@@ -209,7 +209,22 @@ def _label_matches(label: str, it: dict, leaf: str) -> bool:
     return leaf == label
 
 
-def desglose_mercado(label: str, desde: date, hasta_incl: date) -> list[dict]:
+def _filas_universo(desde: date, hasta_incl: date, fdelmotte: bool):
+    """Filtra `_lineas_vinos` por marca: FdelMotte tiene su propio SNAP
+    separado del resto de Grupo Colomé (pedido explícito de Ezequiel
+    2026-10-19 -- ver docstring de `_agregado_sbl`). Extraído acá como
+    helper único (2026-10-22, pedido "llevá FdelMotte al mismo formato que
+    Consolidado") para que ambos SNAP compartan EXACTAMENTE la misma
+    clasificación por línea de negocio/mercado -- la única diferencia entre
+    los dos es qué filas crudas entran, no la lógica que las agrupa."""
+    for it in _lineas_vinos(desde, hasta_incl):
+        es_fdelmotte = it.get("d_rubro") == "FDELMOTTE **"
+        if es_fdelmotte != fdelmotte:
+            continue
+        yield it
+
+
+def desglose_mercado(label: str, desde: date, hasta_incl: date, fdelmotte: bool = False) -> list[dict]:
     """Desglose por mercado (provincia Argentina / Exterior, mismo catálogo
     ya validado que usa Ventas por Jurisdicción -- jurisdiccion_mapa en
     Datos Maestros) de las filas que componen una línea/total de Sales by
@@ -217,16 +232,13 @@ def desglose_mercado(label: str, desde: date, hasta_incl: date) -> list[dict]:
     clic en una línea del SNAP y ver el "Sales by Market" correspondiente a
     ESA línea, en vivo (el Sales by Market mock de ~40 países se había
     sacado el 2026-10-19 por no estar conectado -- ver ARQUITECTURA.md).
-    Usa la MISMA fuente/filtro que `_agregado_sbl` (`_lineas_vinos`,
-    universo VINOS \\*\\*, FdelMotte excluido) para no divergir del total
-    que ya se ve en la fila."""
+    Usa la MISMA fuente/filtro que `_agregado_sbl` (`_lineas_vinos`, vía
+    `_filas_universo`) para no divergir del total que ya se ve en la fila."""
     from jurisdiccion import _mapa_jurisdiccion
     reglas = _mapa_linea_negocio()
     mapa_jur = _mapa_jurisdiccion()
     acc: dict[str, list[float]] = {}
-    for it in _lineas_vinos(desde, hasta_incl):
-        if it.get("d_rubro") == "FDELMOTTE **":
-            continue
+    for it in _filas_universo(desde, hasta_incl, fdelmotte):
         leaf = _clasificar_leaf(it, reglas)
         if not _label_matches(label, it, leaf):
             continue
@@ -241,7 +253,7 @@ def desglose_mercado(label: str, desde: date, hasta_incl: date) -> list[dict]:
     return out
 
 
-def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
+def _agregado_sbl(desde: date, hasta_incl: date, fdelmotte: bool = False) -> dict[str, list[float]]:
     """{linea: [usd, cajas, costo_usd]} para el rango dado.
 
     REFACTOR 2026-10-19 (pedido explícito de Ezequiel: "no tenemos que
@@ -256,20 +268,24 @@ def _agregado_sbl(desde: date, hasta_incl: date) -> dict[str, list[float]]:
     dos veces y podía quedar desincronizada. Ahora Sales by Line of
     Business CONSUME el mismo generador que el resto de la app: la
     clasificación en líneas de negocio se aplica como una capa sobre las
-    MISMAS filas, no sobre una reconsulta independiente a ig_ventas."""
+    MISMAS filas, no sobre una reconsulta independiente a ig_ventas.
+
+    `fdelmotte=True` (agregado 2026-10-22, pedido "llevá FdelMotte al mismo
+    formato que Consolidado"): agrega SOLO las filas de FdelMotte -- antes
+    esta función las excluía sin opción, FdelMotte se armaba aparte en
+    app.js sin comparativo LY ni desglose por línea/mercado. MISMA lógica
+    de clasificación (`snap_linea_negocio_mapa` filtra por centro_costo/
+    categoria/canal_venta, no por marca, así que aplica igual de bien). Si
+    FdelMotte tiene canales que Colomé no usa (ej. sin Hotel/Visitor Center
+    propios), esas filas caen en "Sin clasificar" -- visible, no se
+    pierden (mismo criterio que el resto del módulo). Mismo criterio de
+    separación de marcas ya confirmado con Ariel Culasso 2026-10-09 para
+    Panel de Ventas (ver proyecto_colome_fdelmotte_separada) -- lo que
+    cambia acá es que FdelMotte ahora tiene SU PROPIO Sales by Line of
+    Business en vez de solo gráficos de Top clientes/productos."""
     reglas = _mapa_linea_negocio()
     acc: dict[str, list[float]] = {}
-    for it in _lineas_vinos(desde, hasta_incl):
-        if it.get("d_rubro") == "FDELMOTTE **":
-            # FdelMotte tiene su propio SNAP separado (pestaña "FdelMotte"
-            # de esta misma hoja) -- queda pre-excluida de "la estadística
-            # de ventas" (Sales by Line of Business), aclarado explícito
-            # por Ezequiel 2026-10-19 al corregir una mala interpretación
-            # de un pedido anterior ("no me refiero a familia del monte,
-            # tiene su propio snap"). Mismo criterio ya confirmado con
-            # Ariel Culasso 2026-10-09 para Panel de Ventas (ver
-            # proyecto_colome_fdelmotte_separada).
-            continue
+    for it in _filas_universo(desde, hasta_incl, fdelmotte):
         categoria = it.get("d_categoria") or ""
         if categoria in DOMESTIC_WHOLESALE:
             linea = "Grupo Colome Domestic"
@@ -425,17 +441,28 @@ def _agregado_sbl_con_lfy(desde: date, hasta_incl: date) -> dict[str, list[float
     return acc
 
 
-def ventas_sbl(desde: date, hasta_incl: date) -> list[dict | None]:
+def ventas_sbl(desde: date, hasta_incl: date, fdelmotte: bool = False) -> list[dict | None]:
     """Filas de Sales by Line of Business para el rango [desde, hasta_incl].
     LY se calcula para el mismo rango corrido un año atrás, combinando la
     fixture LFY (jul-ago 2025) con el histórico real en vivo para el resto
     del rango -- `None` solo si ni siquiera eso alcanza (LY antes de
-    `LFY_DESDE`, 2025-07-01)."""
-    agg = _agregado_sbl(desde, hasta_incl)
+    `LFY_DESDE`, 2025-07-01).
+
+    `fdelmotte=True` (2026-10-22): la fixture LFY es un volcado puntual de
+    `LFY.xlsx` que Ariel mandó para la marca Colomé -- no existe el
+    equivalente para FdelMotte, así que acá el LY se apoya SOLO en el
+    histórico real en vivo (desde `DESDE_HISTORICO`, 2025-09-01). Un rango
+    de LY que cae antes de esa fecha queda en `None` ("n/d"), igual que
+    cualquier otro hueco sin dato real en el resto del módulo -- no se
+    inventa ni se aproxima."""
+    agg = _agregado_sbl(desde, hasta_incl, fdelmotte)
 
     desde_ly = date(desde.year - 1, desde.month, desde.day)
     hasta_ly = date(hasta_incl.year - 1, hasta_incl.month, hasta_incl.day)
-    ly = _agregado_sbl_con_lfy(desde_ly, hasta_ly) if desde_ly >= LFY_DESDE else None
+    if fdelmotte:
+        ly = _agregado_sbl(desde_ly, hasta_ly, fdelmotte=True) if desde_ly >= DESDE_HISTORICO else None
+    else:
+        ly = _agregado_sbl_con_lfy(desde_ly, hasta_ly) if desde_ly >= LFY_DESDE else None
 
     domestic = _fila("Grupo Colome Domestic", agg, ly, sin_costeo=True)
     export_ = _fila("Grupo Colome Export", agg, ly, sin_costeo=True)
@@ -593,18 +620,21 @@ async def snap_mercado(
     label: str,
     desde: str,
     hasta: str,
+    fdelmotte: bool = False,
     user=Depends(require_reader),
 ):
     """Popup "Sales by Market" de una línea puntual de Sales by Line of
     Business -- `desde`/`hasta` (YYYY-MM-DD) vienen del frontend, que pasa
-    el MISMO rango que ya está mostrando (Monthly o YTD, ver snap.js)."""
+    el MISMO rango que ya está mostrando (Monthly o YTD, ver snap.js).
+    `fdelmotte` (2026-10-22): mismo popup para la pestaña FdelMotte del
+    SNAP, ver `ventas_sbl`."""
     d0 = date.fromisoformat(desde)
     d1 = date.fromisoformat(hasta)
-    return {"label": label, "desde": desde, "hasta": hasta, "rows": desglose_mercado(label, d0, d1)}
+    return {"label": label, "desde": desde, "hasta": hasta, "rows": desglose_mercado(label, d0, d1, fdelmotte=fdelmotte)}
 
 
 @router.get("/snap")
-async def snap(mes: str | None = None, user=Depends(require_reader)):
+async def snap(mes: str | None = None, fdelmotte: bool = False, user=Depends(require_reader)):
     """{sbl_mes, sbl_ytd, periodo, desde_ytd, hasta_ytd, meses_disponibles,
     ly_mensual}.
     `mes` (query param "YYYY-MM", opcional) elige qué mes mostrar en
@@ -612,7 +642,14 @@ async def snap(mes: str | None = None, user=Depends(require_reader)):
     ejercicio fiscal). Sin `mes`, default al último mes calendario CERRADO
     (el actual todavía puede recibir comprobantes tarde). Selector pedido
     explícito de Ezequiel 2026-10-19 -- antes el mes cerrado era fijo, sin
-    forma de elegir otro."""
+    forma de elegir otro.
+
+    `fdelmotte=True` (2026-10-22, pedido "llevá FdelMotte al mismo formato
+    que Consolidado"): mismo SNAP pero con el universo de filas de
+    FdelMotte en vez de excluirlas -- ver `ventas_sbl`/`_agregado_sbl`.
+    `ly_mensual` se omite acá (solo lo consume la tabla comparativa de
+    Panel de Ventas, que es exclusiva de Colomé, no de esta pestaña) para
+    no calcular un SNAP completo de 12+ meses de más en cada request."""
     disponibles = _meses_disponibles()
     if mes and mes in disponibles:
         anio, mes_num = (int(x) for x in mes.split("-"))
@@ -627,7 +664,7 @@ async def snap(mes: str | None = None, user=Depends(require_reader)):
         "desde_ytd": desde_ytd.isoformat(),
         "hasta_ytd": hasta_mes.isoformat(),
         "meses_disponibles": disponibles,
-        "sbl_mes": ventas_sbl(desde_mes, hasta_mes),
-        "sbl_ytd": ventas_sbl(desde_ytd, hasta_mes),
-        "ly_mensual": _ly_mensual(),
+        "sbl_mes": ventas_sbl(desde_mes, hasta_mes, fdelmotte=fdelmotte),
+        "sbl_ytd": ventas_sbl(desde_ytd, hasta_mes, fdelmotte=fdelmotte),
+        "ly_mensual": _ly_mensual() if not fdelmotte else [],
     }

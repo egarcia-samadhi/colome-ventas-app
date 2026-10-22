@@ -76,12 +76,21 @@ export default function VentasPage() {
     // Sales Performance).
     const vaAPanelORegion = hash === "" || hash === "panel" || hash === "region";
 
-    const inyectarSnap = (dataJson: string, snapJs: string) => {
+    const inyectarSnap = (dataJson: string, dataJsonFm: string, snapJs: string) => {
       const dataScript = document.createElement("script");
       dataScript.id = "colome-data";
       dataScript.type = "application/json";
       dataScript.textContent = dataJson;
       document.body.appendChild(dataScript);
+
+      // FdelMotte (2026-10-22, pedido "llevá FdelMotte al mismo formato que
+      // Consolidado"): segunda instancia de snap.js, con su propio JSON --
+      // ver backend/snap.py ("fdelmotte=1") y crearSnapInstance en snap.js.
+      const dataScriptFm = document.createElement("script");
+      dataScriptFm.id = "colome-data-fm";
+      dataScriptFm.type = "application/json";
+      dataScriptFm.textContent = dataJsonFm;
+      document.body.appendChild(dataScriptFm);
 
       const snapScript = document.createElement("script");
       snapScript.textContent = snapJs;
@@ -97,6 +106,11 @@ export default function VentasPage() {
     const fetchFresh = (url: string) => fetch(url, { cache: "reload" }).then((r) => r.text());
 
     const fetchSnap = () => fetch("/api/ventas/snap").then((r) => {
+      if (r.status === 401) { window.location.href = "/"; return "{}"; }
+      return r.text();
+    });
+
+    const fetchSnapFdelMotte = () => fetch("/api/ventas/snap?fdelmotte=1").then((r) => {
       if (r.status === 401) { window.location.href = "/"; return "{}"; }
       return r.text();
     });
@@ -128,13 +142,14 @@ export default function VentasPage() {
         fetchFresh("/ventas/sidebar.html"),
         fetchFresh("/ventas/content.html"),
         fetchSnap(),
+        fetchSnapFdelMotte(),
         fetchPanel(),
         fetchFresh("/ventas/snap.js"),
         fetchFresh("/ventas/app.js"),
-      ]).then(([sidebarHtml, contentHtml, dataJson, factsJson, snapJs, appJs]) => {
+      ]).then(([sidebarHtml, contentHtml, dataJson, dataJsonFm, factsJson, snapJs, appJs]) => {
         if (sidebarRef.current) sidebarRef.current.innerHTML = sidebarHtml;
         if (contentRef.current) contentRef.current.innerHTML = contentHtml;
-        inyectarSnap(dataJson, snapJs);
+        inyectarSnap(dataJson, dataJsonFm, snapJs);
         inyectarPanel(factsJson, appJs);
         setLoaded(true);
       });
@@ -145,15 +160,16 @@ export default function VentasPage() {
       fetchFresh("/ventas/sidebar.html"),
       fetchFresh("/ventas/content.html"),
       fetchSnap(),
+      fetchSnapFdelMotte(),
       fetchFresh("/ventas/snap.js"),
-    ]).then(([sidebarHtml, contentHtml, dataJson, snapJs]) => {
+    ]).then(([sidebarHtml, contentHtml, dataJson, dataJsonFm, snapJs]) => {
       if (sidebarRef.current) sidebarRef.current.innerHTML = sidebarHtml;
       if (contentRef.current) contentRef.current.innerHTML = contentHtml;
 
       // orden exacto del documento original (shell-app.html): colome-data
       // -> snap.js (lee colome-data), ya con los divs/ids de arriba
       // presentes en el DOM. Sales Performance ya es usable acá.
-      inyectarSnap(dataJson, snapJs);
+      inyectarSnap(dataJson, dataJsonFm, snapJs);
       setLoaded(true);
 
       // Etapa 2, en paralelo sin bloquear lo de arriba -- Panel de Ventas y

@@ -423,26 +423,6 @@
     return s + '</svg>';
   }
 
-  // ---------- Sales Performance — sub-pestaña FdelMotte (datos en vivo) ----------
-  function rowsFdelMotte() {
-    if (FDELMOTTE_IDX < 0) return [];
-    return F.filter(f => f[I.brand] === FDELMOTTE_IDX && EJ_DATA[f[0]] === EJERCICIO_ACTUAL);
-  }
-  function renderSnapFdelMotte() {
-    const box = $('fmBody');
-    if (!box) return;
-    if (FDELMOTTE_IDX < 0) { box.innerHTML = '<div class="empty">No hay ventas de FdelMotte registradas en ig_ventas.</div>'; return; }
-    const rows = rowsFdelMotte();
-    if (!rows.length) { box.innerHTML = `<div class="empty">Sin datos de FdelMotte para el ejercicio ${EJERCICIO_ACTUAL}.</div>`; return; }
-    const t = total(rows), g = gm(t);
-    let h = '<div class="kpis">' +
-      [['Ingresos totales (US$)', money(t.usd)], ['Total cajas 9L', int(t.cajas)], ['Precio prom. / caja (US$)', price(avgPrice(t))], ['Margen bruto %', g === null ? '—' : pct(g)]]
-        .map(k => `<div class="kpi"><div class="v">${k[1]}</div><div class="l">${k[0]}</div></div>`).join('') + '</div>';
-    h += `<div class="card chart"><h3>Top 10 clientes — Ejercicio ${EJERCICIO_ACTUAL}</h3>${svgHBars(groupBy(rows, I.cliente), r => nombrePropio(D.cliente[r.k]))}</div>`;
-    h += `<div class="card chart"><h3>Top 10 productos — Ejercicio ${EJERCICIO_ACTUAL}</h3>${svgHBars(groupBy(rows, I.producto), r => nombrePropio(D.producto[r.k]))}</div>`;
-    box.innerHTML = h;
-  }
-
   // ---------- render Panel ----------
   function varCell(v, f) { // f = formateador de la métrica; sin f => porcentaje
     if (v === null || v === undefined || !isFinite(v)) return `<td class="n">${ND}</td>`;
@@ -722,12 +702,10 @@
       const fm = e.target.value === 'fdelmotte';
       $('snapConsolidado').hidden = fm;
       $('snapFdelMotte').hidden = !fm;
-      if (fm) renderSnapFdelMotte();
     });
   });
 
   renderPanel();
-  renderSnapFdelMotte();
   show((location.hash || '').replace('#', ''));
   // Los 3 pills de Ventas ahora viven en el nav compartido (AppShell, fuera
   // de este script) y navegan por hash plano (<a href="/#snap"> etc, ver
