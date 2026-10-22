@@ -8,7 +8,7 @@ pill flotante, sidebar oscuro `#2b2d31`, acento dorado/bordó) — ver
 antes, creado 2026-10-19 al cerrar la sesión de Otros Análisis — ver norma
 de trabajo "Actualizar ARQUITECTURA.md al cerrar").
 
-Última actualización: 2026-10-21 (precalentamiento del mes en curso + filtro previo "Agrupante de Canal" + popup "Sales by Market" por línea del SNAP).
+Última actualización: 2026-10-22 (formato del popup "Sales by Market" mejorado + FdelMotte llevado al mismo formato que Consolidado en Sales Performance).
 
 ## Estructura
 
@@ -128,7 +128,11 @@ números parecían razonables a simple vista pero tenían 2 bugs reales
 escondidos):
 1. **FdelMotte** (`d_rubro="FDELMOTTE **"`) hay que excluirla del
    consolidado -- existe en ig_ventas pero no en el Excel/SNAP real (mismo
-   criterio ya confirmado para Panel de Ventas).
+   criterio ya confirmado para Panel de Ventas). Desde 2026-10-22 FdelMotte
+   tiene su PROPIO Sales by Line of Business (ver sección "FdelMotte al
+   mismo formato que Consolidado" más abajo) -- la exclusión de acá sigue
+   aplicando tal cual al consolidado de Colomé, FdelMotte ahora es un
+   universo paralelo, no una exclusión sin reemplazo.
 2. **`costo_unit_mon_alt` corrupto** en ciertos artículos vendidos por
    VENTA AL PERSONAL/HOSPITALIDAD (ej. "AMALAYA BLANCO DULCE" con costo
    ~USD 1.87M/botella contra un precio de ~USD 2.70) -- guard de 2
@@ -529,6 +533,74 @@ tabla: es un desglose nuevo, por línea, construido desde cero.
 
 Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_sales_by_market_popup`.
+
+**Formato del popup mejorado (2026-10-22):** fila TOTAL al pie (mismo
+estilo que el resto de tablas), filas ordenadas por USD descendente, barra
+de participación por mercado (`.mkt-bar`/`.mkt-bar-fill`, gradiente
+dorado), barra dorada superior en el modal (`.modal-box::before`, igual
+que los stat-tiles) y header de tabla con fondo dorado suave. Fix de
+scroll horizontal: `.mkt-table` usa `table-layout:fixed`/`min-width:0` en
+vez del `min-width:520px` fijo de `table.tight` (que desbordaba el modal).
+
+## FdelMotte al mismo formato que Consolidado (agregado 2026-10-22)
+
+Pedido explícito de Ezequiel: "porque el sales performance de Fdelmotte es
+distinto al consolidado? deberias llevarlo al mismo formato que
+consolidado" -- eligió paridad completa (no solo piel visual) cuando se le
+preguntó el alcance.
+
+Antes FdelMotte se armaba con un pipeline de render completamente
+separado, viejo, en `app.js` (`rowsFdelMotte()`/`renderSnapFdelMotte()`):
+KPIs sin comparativo LY + 2 gráficos de barras SVG (Top clientes/
+productos), sin tabla "Sales by Line of Business" ni popup de mercado.
+Consolidado en cambio ya corría 100% en vivo sobre `snap.py` desde
+2026-10-19. Esa divergencia es la misma clase de bug estructural que el
+refactor de `_agregado_sbl` del 2026-10-19 (dos pipelines del mismo
+universo de datos que pueden desalinearse) -- la solución fue la misma:
+unificar en una sola fuente.
+
+- **Backend (`snap.py`):** `_filas_universo(desde, hasta_incl, fdelmotte)`
+  es ahora el ÚNICO punto que decide qué filas de `_lineas_vinos` entran
+  (antes `_agregado_sbl`/`desglose_mercado` tenían cada una su propio `if
+  d_rubro == "FDELMOTTE **": continue` hardcodeado). `_agregado_sbl`,
+  `desglose_mercado` y `ventas_sbl` reciben `fdelmotte: bool = False`. La
+  clasificación por línea de negocio (`snap_linea_negocio_mapa`) filtra
+  por centro_costo/categoria/canal_venta, NO por marca -- aplica igual de
+  bien a FdelMotte sin reglas nuevas; lo que no matchea cae en "Sin
+  clasificar" (visible, mismo criterio de siempre).
+  - **Gotcha de LY:** la fixture `lfy_jul_ago_2025.json` (tapa el hueco
+    anterior a `DESDE_HISTORICO` 2025-09-01) es un volcado puntual que
+    Ariel mandó SOLO para la marca Colomé -- no existe el equivalente para
+    FdelMotte. Con `fdelmotte=True`, el LY se apoya SOLO en histórico real
+    en vivo; un LY que cae antes de 2025-09-01 queda en "n/d", no se
+    inventa ni se aproxima con la fixture de otra marca.
+  - `GET /api/ventas/snap` y `GET /api/ventas/snap/mercado` aceptan
+    `fdelmotte: bool = False` como query param. `ly_mensual` (solo lo usa
+    la tabla comparativa de Panel de Ventas, exclusiva de Colomé) se omite
+    cuando `fdelmotte=True`.
+- **Frontend (`snap.js`):** reescrito de script con estado global único a
+  **fábrica** `crearSnapInstance({dataElId, rootElId, qs})` -- dos
+  instancias independientes corriendo en paralelo (Consolidado y
+  FdelMotte), cada una con su propio `RAW`/`periodoActivo`, apuntando a
+  `#snapConsolidado`/`#snapFdelMotte` y escaneando sus hijos por CLASE
+  (`.stat-row`/`.sbl-table-mount`/`.period-toggle`, no por id, para poder
+  repetir el mismo markup dos veces en `content.html`). El `<select
+  id="snapMesSel">` del sidebar sigue siendo uno solo, compartido -- ahora
+  refetchea las DOS instancias al cambiar de mes.
+- **`content.html`:** `#snapFdelMotte` pasó a tener la MISMA estructura
+  que `#snapConsolidado` (period-toggle + stat-row + tabla), con el
+  `<h2>` aclarando "— FdelMotte".
+- **`page.tsx`:** segundo fetch a `/api/ventas/snap?fdelmotte=1` y segundo
+  `<script id="colome-data-fm">` inyectado antes de `snap.js`, en los dos
+  `Promise.all` (fast path de Sales Performance y full path de Panel/
+  Región).
+- **`app.js`:** se eliminaron `rowsFdelMotte()`/`renderSnapFdelMotte()` y
+  su invocación -- el toggle de pestañas (mostrar/ocultar
+  `#snapConsolidado`/`#snapFdelMotte`) se mantiene, ya no dispara un
+  render propio.
+
+Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_fdelmotte_paridad_consolidado`.
 
 ## Deploy
 
