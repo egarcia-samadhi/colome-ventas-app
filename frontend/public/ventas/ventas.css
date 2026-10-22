@@ -137,7 +137,7 @@
   .sbl-link { color: inherit; text-decoration: none; border-bottom: 1px dashed var(--soft); cursor: pointer; }
   .sbl-link:hover { color: var(--accent, #7D4E5B); border-bottom-color: var(--accent, #7D4E5B); }
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-  .modal-box { background: var(--card); border-radius: 14px; padding: 22px; width: 520px; max-width: calc(100vw - 32px); max-height: calc(100vh - 64px); overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,.25); position: relative; }
+  .modal-box { background: var(--card); border-radius: 14px; padding: 22px; width: 560px; max-width: calc(100vw - 32px); max-height: calc(100vh - 64px); overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,.25); position: relative; }
   .modal-box::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: linear-gradient(90deg, var(--gold), var(--gold-d)); border-radius: 14px 14px 0 0; }
   .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .modal-head h3 { margin: 0; font-size: 14px; font-weight: 700; color: var(--ink); }
@@ -154,6 +154,9 @@
   .mkt-table thead th { background: linear-gradient(180deg, #f3e9d3, #ede0c2); color: var(--gold-d); border-bottom: 2px solid var(--gold-d); }
   .mkt-table thead th:first-child { border-radius: 8px 0 0 0; }
   .mkt-table thead th:last-child { border-radius: 0 8px 0 0; }
+  .mkt-table { min-width: 0; table-layout: fixed; }
+  .mkt-table td.label, .mkt-table th:first-child { width: 34%; }
+  .mkt-table .mkt-bar { width: 44px; }
 
   /* tablas */
   table { border-collapse: collapse; width: 100%; font-size: 13px; }
