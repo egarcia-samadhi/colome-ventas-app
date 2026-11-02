@@ -125,16 +125,14 @@ jerárquicamente relacionados en cualquier proyecto).
    siguiente, que hace innecesario ese link.
 2. Rango de fechas libre, **vista acumulada** (la tabla principal sigue
    sumando todo el rango sin desglosar por mes).
-3. **Drill-down de tendencia**: panel "Tendencia por período"
-   (Cantidad/Venta Neta/Descuento Comercial por mes) -- usa el campo
-   `periodo` (YYYY-MM) que viaja en cada fila agregada por
-   `ventas_por_vendedor()`, calculado client-side del mismo payload sin
-   pedir un endpoint aparte. **2da vuelta el mismo día** (Ezequiel: "no ve
-   el drill down que pedia ariel"): el panel SOLO aparecía si se aislaba
-   EXACTAMENTE 1 vendedor tildado -- mecanismo no obvio, no se veía. Ahora
-   está SIEMPRE visible: título "Tendencia por período — Total" (suma de
-   todos los vendedores en el filtro actual) por default, o el nombre del
-   vendedor cuando se tilda uno solo.
+3. **Drill-down de tendencia -- intentado y descartado el mismo día.**
+   Se probaron 2 variantes (panel "Tendencia por período" visible solo al
+   aislar 1 vendedor, después "siempre visible con Total") usando el
+   campo `periodo` que viaja en cada fila agregada por
+   `ventas_por_vendedor()`. Ezequiel terminó pidiendo sacarlo del todo
+   ("no, sacalo del todo") -- Por Vendedor NO tiene drill-down de
+   tendencia, solo la tabla principal acumulada. El campo `periodo` sigue
+   en el backend por si se retoma a futuro.
 4. **Descuento Comercial** agregado como 3ra sub-columna por vendedor.
    Margen queda pendiente para una iteración futura (Ariel: "dps le
    agregaremos el margen"). Orden de columnas corregido el mismo día
@@ -168,10 +166,14 @@ chips de cualquier proyecto, no solo Colomé-Ventas).
 
 *"sabes que le falta a las 3 pestañas? que se pueda ordenar al hacer clic en el encabezado"*. `SortTh`/`ordenar()` genéricos (helpers al tope de `otros-analisis/page.tsx`) -- 1er click en una columna ordena desc, 2do click invierte a asc, click en otra columna reinicia en desc, indicador ▲/▼ en la columna activa.
 - Por Cliente/Por SKU (rankings planos): todas las columnas numéricas + la de nombre son ordenables, sin restricción.
-- Por Vendedor (tabla PIVOT, caso distinto): Rubro ordena los GRUPOS; Artículo/Total Venta Neta ordenan las filas DENTRO de cada grupo -- las columnas por-vendedor (una por cada vendedor tildado) NO son ordenables, ambiguo con varios vendedores a la vez.
+- Por Vendedor (tabla PIVOT, caso distinto): Rubro ordena los GRUPOS; Artículo/Total Venta Neta ordenan las filas DENTRO de cada grupo. Las sub-columnas por vendedor (Cant./Venta Neta/Desc. Com., una tripleta por cada vendedor) **también se hicieron ordenables** (mismo día, 2da vuelta -- Ezequiel: "cantidad, venta neta y desc. no se pueden ordenar?"): no son ambiguas, cada una ordena SOLO su propio vendedor. `ColVendedor` extendido a un template literal type `` `v:${vendedor}:${metrica}` `` para codificarlas como columnas ordenables independientes.
 
 Las 3 verificadas en vivo (Claude-en-Chrome). Detalle completo en memoria
 de Claude, `proyecto_colome_ventas_rediseno_por_cliente_ariel`.
+
+### Outage de producción, mismo día (causa raíz NO relacionada con el código de la UI)
+
+Durante la verificación en vivo del punto anterior, el tablero completo quedó inaccesible para todos los usuarios por varios minutos ("no carga el tablero directamente", "no anda el tablero"). Causa raíz: `ig_ventas.py::_fetch_dia_remoto` hace fetch SÍNCRONO (`urllib.request`) a la API externa de Redline dentro de un endpoint `async def` de FastAPI con un solo worker uvicorn -- mientras un request recorre un rango de fechas sin cachear (hasta ~30 días, con reintentos síncronos), bloquea el ÚNICO event loop del proceso para TODOS los requests, de cualquier usuario, de cualquier pantalla (confirmado en logs de Traefik: requests de 180s a 430s en `/`, `/otros-analisis/`, `/api/otros-analisis/por-vendedor`). Mitigado reiniciando el servicio (`docker service update --force colome_colome-ventas`) -- **el riesgo de fondo sigue vigente**, cualquier usuario real que pida un rango sin cachear puede repetirlo. Fix arquitectural pendiente (migrar el fetch a async/`run_in_executor`), no implementado todavía. Detalle completo en memoria de Claude, `proyecto_colome_ventas_outage_blocking_io_otros_analisis`.
 - **Gotcha de cache (recurrente, atención si se agrega un campo nuevo a
   `CAMPOS_USADOS`):** el cache por-día en disco (`/data/ig_ventas_cache`,
   persistente para siempre en meses cerrados) solo tiene las claves que
