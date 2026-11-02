@@ -392,6 +392,13 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
 // tabla pasa a ranking de PRODUCTOS (agregado por artículo, sumando a
 // través de lo que quede después de filtrar Marca/Mercado), con Descuento
 // Comercial y Precio Promedio (Venta Neta ARS / Cajas9l) agregados.
+//
+// Orden de los filtros en el sidebar (mismo día, pedido explícito de
+// Ezequiel): Mercado ANTES que Marca -- "siempre de menos a mas (el
+// mercado es lo que contiene la venta de la marca)". Institucionalizado
+// en 00-Normas-de-Trabajo.md: el filtro de la dimensión más amplia/
+// contenedora va primero (arriba), el de la dimensión más específica/
+// contenida va después.
 type ColSku = "d_articulo" | "cajas" | "ars" | "descuento" | "precioProm";
 
 function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
@@ -419,18 +426,18 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
         <RangoFechas desde={desde} hasta={hasta} onChange={(d, h) => { setDesde(d); setHasta(h); }} />
         <BuscadorTexto valor={busqueda} onChange={setBusqueda} placeholder="Artículo…" label="Buscar" />
         <ChipsFiltro
-          label="Marca"
-          opciones={marcas}
-          seleccionados={marcasSeleccion}
-          onToggle={toggleSet(marcasSeleccion, setMarcasSeleccion)}
-          onLimpiar={() => setMarcasSeleccion(new Set())}
-        />
-        <ChipsFiltro
           label="Mercado"
           opciones={mercados}
           seleccionados={mercadosSeleccion}
           onToggle={toggleSet(mercadosSeleccion, setMercadosSeleccion)}
           onLimpiar={() => setMercadosSeleccion(new Set())}
+        />
+        <ChipsFiltro
+          label="Marca"
+          opciones={marcas}
+          seleccionados={marcasSeleccion}
+          onToggle={toggleSet(marcasSeleccion, setMarcasSeleccion)}
+          onLimpiar={() => setMarcasSeleccion(new Set())}
         />
       </div>
     );
