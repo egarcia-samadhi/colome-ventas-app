@@ -602,6 +602,45 @@ unificar en una sola fuente.
 Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_fdelmotte_paridad_consolidado`.
 
+## Fix: nav Panel/Región/Sales Performance roto (2026-11-02)
+
+El refactor de FdelMotte de arriba (`6d61ebc`, 2026-10-29) convirtió el
+`RAW` de `snap.js` en una variable **local** a cada instancia de
+`crearSnapInstance`. `app.js` nunca se actualizó: `lyMes()`/`snapRef()`
+seguían leyendo un `RAW` global que ya no existía, tirando
+`ReferenceError: RAW is not defined` dentro de `renderPanel()` -- llamada
+sin `try/catch`, de forma síncrona, **antes** de `show()` y de
+`window.addEventListener('hashchange', ...)` al final de la IIFE de
+`app.js`. El throw cortaba el resto del script: nunca se registraba el
+listener de hashchange, así que clickear cualquier pestaña del nav
+(Panel de Ventas/Ventas por Región/Sales Performance) cambiaba la
+URL/el resaltado (eso lo maneja `Header` en `AppShell.tsx`, componente
+React aparte) pero el contenido quedaba congelado en lo que fuera
+visible por defecto en `content.html` (Sales Performance) -- bug real en
+producción desde el 2026-10-29 hasta este fix, reportado por un cliente.
+
+**Fix (commit `a4bd749`, 2026-11-02):**
+- `app.js` declara su propio `const RAW = JSON.parse(document
+  .getElementById('colome-data').textContent)` al tope de la IIFE (mismo
+  patrón que ya usa `snap.js::poblarSelectorMes()`) -- siempre lee el
+  Consolidado, nunca FdelMotte (Panel de Ventas/Región son cifras
+  consolidadas, no tienen vista FdelMotte propia).
+- La llamada inicial a `renderPanel()` (antes de `show()`) se envolvió en
+  `try/catch` -- un error ahí nunca debe volver a dejar sordo el resto
+  del script.
+
+Verificado en vivo (Claude-en-Chrome contra producción): las 3 pestañas
+cambian de contenido real, sin errores de consola. Detalle completo en
+memoria de Claude, `proyecto_colome_ventas_fix_nav_rota_raw_fdelmotte`.
+
+**Lección para cualquier refactor futuro de `snap.js`/`app.js`:** ambos
+archivos comparten estado vía variables globales inyectadas por script
+dinámico (no hay un bundler ni imports entre ellos) -- un cambio de
+"global" a "scoped" en uno de los dos sin tocar el otro rompe la
+navegación COMPLETA de forma silenciosa (sin error visible en pantalla,
+solo en consola). Re-clickear el nav de las 3 pestañas en vivo después
+de cualquier cambio en estos dos archivos, no alcanza con que compile.
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com
