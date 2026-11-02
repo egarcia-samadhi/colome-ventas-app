@@ -549,7 +549,16 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
 // (Rubro), "d_articulo"/"totalArs" reordenan las filas DENTRO de cada
 // grupo (las columnas por-vendedor no son ordenables, ambiguo en una
 // tabla pivot con varios vendedores a la vez).
-type ColVendedor = "rubro" | "d_articulo" | "totalArs";
+// Columnas por-vendedor (Cant./Venta Neta/Desc. Com.) codificadas como
+// "v:<vendedor>:<métrica>" -- pedido explícito de Ezequiel 2026-11-02
+// ("cantidad, venta neta y desc. no se pueden ordenar?"), agregado sobre
+// el diseño original que solo dejaba ordenar Rubro/Artículo/Total (esas
+// sub-columnas parecían ambiguas con varios vendedores tildados a la vez,
+// pero no lo son: cada una ordena SU PROPIO vendedor, sin afectar al
+// resto -- fila sin esa métrica para ese vendedor cuenta como 0).
+type MetricaVendedor = "cantidad" | "ars" | "descuento";
+type ColVendedor = "rubro" | "d_articulo" | "totalArs" | `v:${string}:${MetricaVendedor}`;
+const colVendedor = (vendedor: string, metrica: MetricaVendedor): ColVendedor => `v:${vendedor}:${metrica}`;
 
 function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
   const [{ desde: desdeDefault, hasta: hastaDefault }] = useState(mesCerradoAnteriorRango());
@@ -610,9 +619,10 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
     });
   }
 
-  // Rubro ordena los grupos; Artículo/Total ordenan las filas DENTRO de
-  // cada grupo (el orden de los grupos entre sí queda alfabético por
-  // Rubro en ese caso, para no desarmar el agrupado).
+  // Rubro ordena los grupos; cualquier otra columna (Artículo, Total, o
+  // una sub-columna por-vendedor) ordena las filas DENTRO de cada grupo
+  // (el orden de los grupos entre sí queda alfabético por Rubro en ese
+  // caso, para no desarmar el agrupado).
   const colFila: ColVendedor = sort.col === "rubro" ? "d_articulo" : sort.col;
   const dirFila = sort.col === "rubro" ? "asc" : sort.dir;
   const grupos = ordenar(
@@ -624,7 +634,12 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
           return { c_articulo, d_articulo: v.d_articulo, porVendedor: v.porVendedor, totalArs };
         }),
         { col: colFila, dir: dirFila },
-        (f, col) => col === "d_articulo" ? f.d_articulo : f.totalArs,
+        (f, col) => {
+          if (col === "d_articulo") return f.d_articulo;
+          if (col === "totalArs") return f.totalArs;
+          const [, vendedor, metrica] = col.split(":") as [string, string, MetricaVendedor];
+          return f.porVendedor.get(vendedor)?.[metrica] ?? 0;
+        },
       );
       const totalRubroArs = filas.reduce((a, f) => a + f.totalArs, 0);
       // Subtotal por vendedor de la fila "Total {rubro}" (bug real
@@ -689,9 +704,9 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                 <tr className="bg-[#f7f5f0]">
                   {vendedores.map((v) => (
                     <Fragment key={v}>
-                      <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] border-l border-[#ece6d8]">Cant.</th>
-                      <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">Venta Neta</th>
-                      <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">Desc. Com.</th>
+                      <SortTh label="Cant." col={colVendedor(v, "cantidad")} sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68] border-l border-[#ece6d8]" />
+                      <SortTh label="Venta Neta" col={colVendedor(v, "ars")} sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68]" />
+                      <SortTh label="Desc. Com." col={colVendedor(v, "descuento")} sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68]" />
                     </Fragment>
                   ))}
                   <SortTh label="Venta Neta" col="totalArs" sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68] border-l border-[#ece6d8]" />
