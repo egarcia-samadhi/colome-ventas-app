@@ -751,9 +751,18 @@ hasta ahora se reusaba tal cual para esta pestaña (ver sección de arriba).
   canal" no coincidía con el de "Por variedad" (deberían ser el MISMO
   universo) -- un canal con venta real el año pasado pero CERO en el
   actual ("Grupo Colome Export") perdía su LY de la suma porque el loop
-  solo recorría los labels del período actual. Fix: recorrer la UNIÓN de
-  labels actual/LY, mismo criterio que "Sin clasificar"/BOB en
-  `ventas_sbl` (nunca esconder plata).
+  solo recorría los labels del período actual.
+- **Lista de filas FIJA (mismo día, 2da confirmación de Ezequiel):**
+  "estas son las lineas que se tienen que ver... no otras... esto es
+  solo para la pestaña del snap de familia del monte" -- a diferencia
+  del resto del SNAP (una categoría sin mapear cae en "Sin clasificar",
+  SIEMPRE visible, para nunca esconder plata), acá Ezequiel pidió
+  explícito lo OPUESTO para esta pestaña puntual: lista CERRADA.
+  `FDELMOTTE_VARIEDADES_ORDEN`/`FDELMOTTE_CANALES_ORDEN` (listas fijas,
+  orden fijo -- no por valor desc) reemplazan el loop dinámico sobre
+  `agg.keys()`/unión de labels del bug de arriba; el Grand total suma
+  SOLO esas 6/3 filas. Si se agrega/saca una variedad de FdelMotte a
+  futuro, hay que tocar estas listas a mano -- ya no es automático.
 
 Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_fdelmotte_estructura_real_snap`.
