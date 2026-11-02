@@ -185,6 +185,45 @@ function ChipsFiltro({ label, opciones, seleccionados, onToggle, onLimpiar }: {
 const normalizar = (s: string) => s.toLowerCase();
 const porNombre = (a: string, b: string) => a.localeCompare(b, "es");
 
+// Encabezados de tabla ordenables por click (pedido explícito de Ezequiel
+// 2026-11-02: "que le falta a las 3 pestañas? que se pueda ordenar al
+// hacer clic en el encabezado") -- 1er click en una columna nueva ordena
+// desc (lo más vendido/caro primero, el caso de uso más común en estas
+// tablas); 2do click en la MISMA columna invierte a asc; click en OTRA
+// columna vuelve a arrancar en desc. Mismo componente `SortTh` en las 3
+// pestañas.
+type SortDir = "asc" | "desc";
+type SortState<K extends string> = { col: K; dir: SortDir };
+
+function SortTh<K extends string>({ label, col, sort, onSort, align = "right", className = "", rowSpan }: {
+  label: string; col: K; sort: SortState<K>; onSort: (col: K) => void; align?: "left" | "right"; className?: string; rowSpan?: number;
+}) {
+  const activo = sort.col === col;
+  return (
+    <th
+      rowSpan={rowSpan}
+      onClick={() => onSort(col)}
+      className={`py-2 px-3 text-[11px] uppercase tracking-wider font-semibold cursor-pointer select-none hover:text-[#1c1811] ${
+        align === "right" ? "text-right" : "text-left"
+      } ${activo ? "text-[#1c1811]" : "text-[#5a5342]"} ${className}`}
+    >
+      {label}
+      <span className={`inline-block ml-1 text-[9px] ${activo ? "opacity-100" : "opacity-0"}`}>
+        {activo && sort.dir === "desc" ? "▼" : "▲"}
+      </span>
+    </th>
+  );
+}
+
+function ordenar<T, K extends string>(filas: T[], sort: SortState<K>, valor: (f: T, col: K) => string | number): T[] {
+  const mult = sort.dir === "asc" ? 1 : -1;
+  return [...filas].sort((a, b) => {
+    const va = valor(a, sort.col), vb = valor(b, sort.col);
+    if (typeof va === "string" || typeof vb === "string") return String(va).localeCompare(String(vb), "es") * mult;
+    return (va - vb) * mult;
+  });
+}
+
 function useOtrosAnalisisRango<T>(endpoint: string, desde: string, hasta: string) {
   const [rows, setRows] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
@@ -209,6 +248,7 @@ function useOtrosAnalisisRango<T>(endpoint: string, desde: string, hasta: string
 }
 
 type Segmentador = "vendedor" | "canal";
+type ColCliente = "cliente" | "cajas" | "cantidad" | "ars" | "descuento";
 
 function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
   const [{ desde: desdeDefault, hasta: hastaDefault }] = useState(mesCerradoAnteriorRango());
@@ -217,6 +257,8 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
   const [busqueda, setBusqueda] = useState("");
   const [segmentador, setSegmentador] = useState<Segmentador>("vendedor");
   const [segmentoSeleccion, setSegmentoSeleccion] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<SortState<ColCliente>>({ col: "ars", dir: "desc" });
+  const onSort = (col: ColCliente) => setSort((prev) => prev.col === col ? { col, dir: prev.dir === "desc" ? "asc" : "desc" } : { col, dir: "desc" });
   const { rows, loading, error } = useOtrosAnalisisRango<FilaCliente>("por-cliente", desde, hasta);
 
   // Cambiar de segmentador (Vendedor<->Canal) resetea la selección -- los
@@ -285,7 +327,7 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
     acc.descuento += r.descuento;
     porCliente.set(r.cliente, acc);
   }
-  const ranking = [...porCliente.values()].sort((a, b) => b.ars - a.ars);
+  const ranking = ordenar([...porCliente.values()], sort, (f, col) => f[col]);
   const total = ranking.reduce((a, f) => ({ cajas: a.cajas + f.cajas, cantidad: a.cantidad + f.cantidad, ars: a.ars + f.ars, descuento: a.descuento + f.descuento }), { cajas: 0, cantidad: 0, ars: 0, descuento: 0 });
 
   return (
@@ -303,11 +345,11 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
             <thead>
               <tr className="bg-[#f7f5f0]">
                 <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">#</th>
-                <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">Cliente</th>
-                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cajas9l</th>
-                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cantidad</th>
-                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
-                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Descuento Comercial</th>
+                <SortTh label="Cliente" col="cliente" sort={sort} onSort={onSort} align="left" className="border-l border-[#ece6d8]" />
+                <SortTh label="Cajas9l" col="cajas" sort={sort} onSort={onSort} />
+                <SortTh label="Cantidad" col="cantidad" sort={sort} onSort={onSort} />
+                <SortTh label="Venta Neta" col="ars" sort={sort} onSort={onSort} />
+                <SortTh label="Descuento Comercial" col="descuento" sort={sort} onSort={onSort} />
               </tr>
             </thead>
             <tbody>
@@ -350,6 +392,8 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
 // tabla pasa a ranking de PRODUCTOS (agregado por artículo, sumando a
 // través de lo que quede después de filtrar Marca/Mercado), con Descuento
 // Comercial y Precio Promedio (Venta Neta ARS / Cajas9l) agregados.
+type ColSku = "d_articulo" | "cajas" | "ars" | "descuento" | "precioProm";
+
 function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
   const [{ desde: desdeDefault, hasta: hastaDefault }] = useState(mesCerradoAnteriorRango());
   const [desde, setDesde] = useState(desdeDefault);
@@ -357,6 +401,8 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
   const [busqueda, setBusqueda] = useState("");
   const [marcasSeleccion, setMarcasSeleccion] = useState<Set<string>>(new Set());
   const [mercadosSeleccion, setMercadosSeleccion] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<SortState<ColSku>>({ col: "ars", dir: "desc" });
+  const onSort = (col: ColSku) => setSort((prev) => prev.col === col ? { col, dir: prev.dir === "desc" ? "asc" : "desc" } : { col, dir: "desc" });
   const { rows, loading, error } = useOtrosAnalisisRango<FilaSku>("por-sku", desde, hasta);
 
   const marcas = [...new Set(rows.map((r) => r.rubro))].sort(porNombre);
@@ -409,7 +455,8 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
     acc.descuento += r.descuento;
     porProducto.set(key, acc);
   }
-  const ranking = [...porProducto.values()].sort((a, b) => b.ars - a.ars);
+  const conPrecioProm = [...porProducto.values()].map((f) => ({ ...f, precioProm: f.cajas ? f.ars / f.cajas : 0 }));
+  const ranking = ordenar(conPrecioProm, sort, (f, col) => f[col]);
   const total = ranking.reduce((a, f) => ({ cajas: a.cajas + f.cajas, ars: a.ars + f.ars, descuento: a.descuento + f.descuento }), { cajas: 0, ars: 0, descuento: 0 });
 
   return (
@@ -427,11 +474,11 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
             <thead>
               <tr className="bg-[#f7f5f0]">
                 <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">#</th>
-                <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">Artículo</th>
-                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cajas9l</th>
-                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
-                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Descuento Comercial</th>
-                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Precio Promedio (por Caja9l)</th>
+                <SortTh label="Artículo" col="d_articulo" sort={sort} onSort={onSort} align="left" className="border-l border-[#ece6d8]" />
+                <SortTh label="Cajas9l" col="cajas" sort={sort} onSort={onSort} />
+                <SortTh label="Venta Neta" col="ars" sort={sort} onSort={onSort} />
+                <SortTh label="Descuento Comercial" col="descuento" sort={sort} onSort={onSort} />
+                <SortTh label="Precio Promedio (por Caja9l)" col="precioProm" sort={sort} onSort={onSort} />
               </tr>
             </thead>
             <tbody>
@@ -486,12 +533,20 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
 //    (Cantidad / Desc. Comercial / Venta Neta) -- Ariel pidió explícito
 //    "cantidad, desc comercial, neto". Margen queda para una iteración
 //    futura (Ariel: "dps le agregaremos el margen").
+// Columnas ordenables de Por Vendedor: "rubro" reordena los GRUPOS
+// (Rubro), "d_articulo"/"totalArs" reordenan las filas DENTRO de cada
+// grupo (las columnas por-vendedor no son ordenables, ambiguo en una
+// tabla pivot con varios vendedores a la vez).
+type ColVendedor = "rubro" | "d_articulo" | "totalArs";
+
 function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
   const [{ desde: desdeDefault, hasta: hastaDefault }] = useState(mesCerradoAnteriorRango());
   const [desde, setDesde] = useState(desdeDefault);
   const [hasta, setHasta] = useState(hastaDefault);
   const [busqueda, setBusqueda] = useState("");
   const [vendedoresSeleccion, setVendedoresSeleccion] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<SortState<ColVendedor>>({ col: "rubro", dir: "asc" });
+  const onSort = (col: ColVendedor) => setSort((prev) => prev.col === col ? { col, dir: prev.dir === "desc" ? "asc" : "desc" } : { col, dir: col === "rubro" || col === "d_articulo" ? "asc" : "desc" });
   const { rows, loading, error } = useOtrosAnalisisRango<FilaVendedor>("por-vendedor", desde, hasta);
 
   // Chips de vendedor para elegir qué columnas mostrar -- la tabla pivotea
@@ -543,15 +598,28 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
     });
   }
 
-  const grupos = [...rubros.entries()].map(([rubro, arts]) => {
-    const filas = [...arts.entries()].map(([key, v]) => {
-      const [c_articulo] = key.split("::");
-      const totalArs = [...v.porVendedor.values()].reduce((a, o) => a + o.ars, 0);
-      return { c_articulo, d_articulo: v.d_articulo, porVendedor: v.porVendedor, totalArs };
-    }).sort((a, b) => porNombre(a.d_articulo, b.d_articulo));
-    const totalRubroArs = filas.reduce((a, f) => a + f.totalArs, 0);
-    return { rubro, filas, totalRubroArs };
-  }).sort((a, b) => porNombre(a.rubro, b.rubro));
+  // Rubro ordena los grupos; Artículo/Total ordenan las filas DENTRO de
+  // cada grupo (el orden de los grupos entre sí queda alfabético por
+  // Rubro en ese caso, para no desarmar el agrupado).
+  const colFila: ColVendedor = sort.col === "rubro" ? "d_articulo" : sort.col;
+  const dirFila = sort.col === "rubro" ? "asc" : sort.dir;
+  const grupos = ordenar(
+    [...rubros.entries()].map(([rubro, arts]) => {
+      const filas = ordenar(
+        [...arts.entries()].map(([key, v]) => {
+          const [c_articulo] = key.split("::");
+          const totalArs = [...v.porVendedor.values()].reduce((a, o) => a + o.ars, 0);
+          return { c_articulo, d_articulo: v.d_articulo, porVendedor: v.porVendedor, totalArs };
+        }),
+        { col: colFila, dir: dirFila },
+        (f, col) => col === "d_articulo" ? f.d_articulo : f.totalArs,
+      );
+      const totalRubroArs = filas.reduce((a, f) => a + f.totalArs, 0);
+      return { rubro, filas, totalRubroArs };
+    }),
+    { col: "rubro", dir: sort.col === "rubro" ? sort.dir : "asc" },
+    (g) => g.rubro,
+  );
 
   // Drill-down: SOLO cuando queda exactamente 1 vendedor visible -- "la
   // tendencia por el período seleccionado" de ESE vendedor, agrupado por
@@ -584,8 +652,8 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-[#f7f5f0]">
-                  <th rowSpan={2} className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] align-bottom whitespace-nowrap">Rubro</th>
-                  <th rowSpan={2} className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] align-bottom whitespace-nowrap border-l border-[#ece6d8]">Artículo</th>
+                  <SortTh label="Rubro" col="rubro" sort={sort} onSort={onSort} align="left" rowSpan={2} className="align-bottom whitespace-nowrap" />
+                  <SortTh label="Artículo" col="d_articulo" sort={sort} onSort={onSort} align="left" rowSpan={2} className="align-bottom whitespace-nowrap border-l border-[#ece6d8]" />
                   {vendedores.map((v) => (
                     <th key={v} colSpan={3} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8] whitespace-nowrap">{v}</th>
                   ))}
@@ -599,7 +667,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                       <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">Venta Neta</th>
                     </Fragment>
                   ))}
-                  <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] border-l border-[#ece6d8]">Venta Neta</th>
+                  <SortTh label="Venta Neta" col="totalArs" sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68] border-l border-[#ece6d8]" />
                 </tr>
               </thead>
               <tbody>
