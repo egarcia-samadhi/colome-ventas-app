@@ -764,6 +764,18 @@ hasta ahora se reusaba tal cual para esta pestaña (ver sección de arriba).
   SOLO esas 6/3 filas. Si se agrega/saca una variedad de FdelMotte a
   futuro, hay que tocar estas listas a mano -- ya no es automático.
 
+- **2 fixes más, mismo día:** 1) columnas desalineadas entre las 2
+  tablas -- cada una autoajustaba el ancho de su columna de etiqueta
+  según su propio texto más largo (variedades más largas que canales).
+  Fix: `table-layout:fixed` + `<colgroup>` con el MISMO ancho de 1ra
+  columna en las 2. 2) "Fantasma" real (Ezequiel: "me costo que lo
+  muestre, me mostraba primero... el sales performance consolidado") --
+  el listener del toggle Consolidado/FdelMotte vivía en `app.js`, que
+  carga en SEGUNDO PLANO (Etapa 2 de `page.tsx`) al entrar directo a
+  Sales Performance; clickear "FdelMotte" antes de que `app.js`
+  terminara de cargar no hacía nada (el radio se tildaba pero el `<div>`
+  no cambiaba). Fix: el listener se mueve a `snap.js` (Etapa 1, rápido).
+
 Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_fdelmotte_estructura_real_snap`.
 
