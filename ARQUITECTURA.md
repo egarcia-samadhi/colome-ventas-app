@@ -645,21 +645,30 @@ de cualquier cambio en estos dos archivos, no alcanza con que compile.
 
 Revierte la decisión del 2026-10-09 ("Budget sacado, nunca existió un dato
 real") -- se basaba en `YTD - Snap - ly.xlsx`, donde esa columna venía
-vacía. Ezequiel compartió `SNAP I September 2026 - NM - VSP 2.xls`, hoja
-"Sales by line of bussines": ahí SÍ viene poblada por línea de negocio
-(Monthly y YTD). No afecta el Budget TOTAL de Panel de Ventas
-(`budget_2026_2027.json`, fuente `Budget_Dinamico.xlsx`) -- son 2 fuentes
-distintas, con un ~1.5-2% de diferencia en el total entre ambas, no
-reconciliadas.
+vacía.
+
+**Primer intento (descartado el mismo día):** Ezequiel compartió `SNAP I
+September 2026 - NM - VSP 2.xls`, hoja "Sales by line of bussines" (SÍ
+trae Budget por línea, Monthly y YTD) -- se extrajo de ahí, pero el TOTAL
+no coincidía centavo a centavo con `budget_2026_2027.json` (Budget TOTAL
+de Panel de Ventas, fuente `Budget_Dinamico.xlsx`, ~1.5-2% de diferencia).
+Ezequiel: *"no podemos usar fuentes distintas"* -- descartado.
+
+**Fuente final, ÚNICA con Panel de Ventas:** `Budget_Dinamico.xlsx`
+clasificado por línea de negocio vía el campo `Mercado` (no `Canal`, que
+solo distingue "Mercado Local"/"Exportación"): `E-commerce`→E-commerce;
+`Distrib. Bs. As.`/`Interior`/`Distrib. NOA`→Grupo Colome Domestic;
+`HCVC - Hotel`→Colome Hotel; `HCVC - VC Col`→Colome Visitor Center;
+`HCVC - VC Cafa`→Cafayate Visitor Center; el resto (UE/Brasil/Reino
+Unido/USA/Suiza/Asia/Canadá/Resto L.A./Caribe/México)→Grupo Colome
+Export. `Employees` sin `Mercado` propio en el archivo -- 0 fijo (igual
+que en el SNAP real). **Validado exacto**: la suma de las 7 líneas de
+cada mes reproduce `budget_2026_2027.json` centavo a centavo (±0.01 de
+redondeo) en los 12 meses del ejercicio 2026-2027.
 
 - **Fixture:** `backend/budget_linea_2026_2027.json` -- `{periodo YYYY-MM:
-  {línea: [usd, cajas]}}`, cubre jul-sep 2026 (los 3 meses de los que ya
-  hay SNAP real -- julio derivado restando YTD(jul+ago) - Monthly(ago) del
-  archivo de agosto). Extractor: hoja "Sales by line of bussines", SOLO el
-  bloque Monthly (filas 0-30 -- el bloque YTD de abajo repite los mismos
-  nombres de fila), columna C = Budget USD (000s), columna I = Budget 9L.
-  Crece agregando una entrada por mes a medida que lleguen más SNAP de
-  Ariel (mismo patrón que `lfy_jul_ago_2025.json`).
+  {línea: [usd, cajas]}}`, cobertura completa jul-2026 a jun-2027 (los 12
+  meses de `Budget_Dinamico.xlsx`).
 - **Backend (`snap.py`):** `_agregado_budget_linea(desde, hasta_incl)` suma
   por rango de meses calendario -- `None` si falta la fixture de algún mes
   del rango (nunca aproxima un rango parcialmente cubierto). `_fila()`/
@@ -674,11 +683,14 @@ reconciliadas.
   Equivalent), mismo patrón visual que la Tabla comparativa anual de
   Panel de Ventas.
 
-Verificado en vivo contra Sep 2026 real: Domestic $477k/8.455 cajas,
-Export $455k/8.408 cajas, E-commerce $28k/377 cajas, Colome Hotel
-$3k/11 cajas, Colome Visitor Center $11k/60 cajas, Cafayate Visitor
-Center $11k/79 cajas -- exacto contra el Excel. Detalle completo en
-memoria de Claude, `proyecto_colome_ventas_budget_por_linea_snap`.
+**Si se carga un Budget nuevo a futuro**, regenerar AMBAS fixtures
+(`budget_2026_2027.json` y `budget_linea_2026_2027.json`) desde el mismo
+archivo con el mismo mapeo -- nunca una sola, para no reabrir el drift.
+
+Verificado en vivo (Claude-en-Chrome): TOTAL SALES Budget de Oct 2026 en
+Sales Performance ($846k) exacto contra el Budget TOTAL de Panel de
+Ventas para el mismo mes (`budget_2026_2027.json`, $846.460,55). Detalle
+completo en memoria de Claude, `proyecto_colome_ventas_budget_por_linea_snap`.
 
 ## Deploy
 
