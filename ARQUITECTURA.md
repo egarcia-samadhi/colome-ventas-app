@@ -106,7 +106,13 @@ filtran a la vez, 2 `ChipsFiltro` en paralelo). Rango de fechas libre.
 Columnas agregadas: **Descuento Comercial** (mismo `m_desc_total`) y
 **Precio Promedio** (Venta Neta ARS / Cajas9l -- criterio propio, Ariel no
 especificó la base exacta; si pide otra, ej. por botella, es 1 línea de
-cambiar en el frontend).
+cambiar en el frontend). **Confirmado por Ezequiel** ("el resto de la
+hoja lo veo ok") salvo el orden de los filtros, corregido el mismo día:
+**Mercado antes que Marca** en el sidebar -- "siempre de menos a mas (el
+mercado es lo que contiene la venta de la marca)", institucionalizado en
+`00-Normas-de-Trabajo.md` como regla general (dimensión contenedora
+primero, dimensión contenida después, para cualquier par de filtros
+jerárquicamente relacionados en cualquier proyecto).
 
 ### Por Vendedor rediseñado (2026-11-02, mismo día, 3er pedido de Ariel)
 
