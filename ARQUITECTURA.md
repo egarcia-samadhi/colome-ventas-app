@@ -869,6 +869,32 @@ Sales Performance ($846k) exacto contra el Budget TOTAL de Panel de
 Ventas para el mismo mes (`budget_2026_2027.json`, $846.460,55). Detalle
 completo en memoria de Claude, `proyecto_colome_ventas_budget_por_linea_snap`.
 
+## Panel de Controles — claridad para no-técnicos (2026-11-02, commit `d39d53a`)
+
+Pedido de Ezequiel: *"en controles, no le queda claro a la gente como
+corregirlo o que es lo que esta faltando"*. Tres campos de texto libre
+sin ninguna pista de los valores válidos (typo = registro nuevo
+invisible, nunca se une al real) y un ítem con un string crudo sin
+etiquetar:
+
+- `datos-maestros/page.tsx`: campo "Línea de negocio" (alta y edición)
+  pasa de `<input>` a `<select>` con `LINEAS_NEGOCIO_VALIDAS` (las 5
+  líneas fijas, mismo conjunto que `DTC_LINEAS_FIJAS` en `snap.py`).
+- `controles/page.tsx::CorregirCanalAgrupanteModal`: fetch a
+  `/api/datos-maestros/canal-agrupante`, `<select>` con los agrupantes
+  ya en uso + "Otro (ninguno de estos)…" que revela un `<input>` de
+  respaldo.
+- `controles/page.tsx`: explicación corta en criollo (👉) debajo de cada
+  control con error, específica por `id` (`jurisdiccion_sin_clasificar`,
+  `sbl_sin_clasificar`, `canal_sin_agrupante`).
+- `controles/page.tsx`: ítem de `sbl_sin_clasificar` pasa de un string
+  crudo (`Centro de Costo / Categoría / Canal de Venta` sin etiquetas)
+  a 3 líneas etiquetadas, usando campos que el backend ya mandaba
+  (`it.centro_costo`/`it.categoria`/`it.canal_venta`, sin tocar backend).
+
+Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_controles_mas_claros`.
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com
