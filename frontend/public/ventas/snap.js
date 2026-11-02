@@ -26,39 +26,44 @@ function td(content, cls) {
 }
 
 // ---------- Sales by Line of Business (conectado en vivo 2026-10-19 a
-// /api/ventas/snap -- ver backend/snap.py. Sin Budget/Forecast, decisión
-// confirmada 2026-10-09: "nunca existió un dato real, se saca". Last Year
-// solo si hay dato real del mismo rango un año atrás.) ----------
+// /api/ventas/snap -- ver backend/snap.py. Last Year y Budget solo se
+// muestran cuando hay dato real del mismo rango -- Budget por línea
+// agregado 2026-11-02, disponible SOLO para los meses de los que Ariel ya
+// mandó un SNAP real (jul-sep 2026 al día de hoy), "n/d" el resto.) ------
 const SBL_TOTAL_ROWS = new Set(['TOTAL SALES TO THIRD PARTIES', 'TOTAL SALES', 'Total Grupo Colome Brand', 'Total Buyers Own Brand (BOB)', 'Total Intercompany Sales', 'Direct-to-consumer Channel']);
 
 function renderSbl(rows) {
   let html = `<table><thead>
     <tr class="grp">
       <th></th>
-      <th class="grp" colspan="3">Sales Value (USD 000s)</th>
+      <th class="grp" colspan="5">Sales Value (USD 000s)</th>
       <th></th>
-      <th class="grp" colspan="3">9 Litre Equivalent</th>
+      <th class="grp" colspan="5">9 Litre Equivalent</th>
     </tr>
     <tr>
       <th>Línea de negocio</th>
-      <th>Actual</th><th>Last Year</th><th>% vs LY</th>
+      <th>Actual</th><th>Last Year</th><th>% vs LY</th><th>Budget</th><th>% vs Bud</th>
       <th></th>
-      <th>Actual</th><th>Last Year</th><th>% vs LY</th>
+      <th>Actual</th><th>Last Year</th><th>% vs LY</th><th>Budget</th><th>% vs Bud</th>
     </tr>
   </thead><tbody>`;
 
   rows.forEach(r => {
-    if (r === null) { html += `<tr class="spacer"><td colspan="8"></td></tr>`; return; }
+    if (r === null) { html += `<tr class="spacer"><td colspan="12"></td></tr>`; return; }
     const isTotal = SBL_TOTAL_ROWS.has(r.label);
     html += `<tr class="${isTotal ? 'total' : ''}">`;
     html += td(`<a href="#" class="sbl-link" data-label="${r.label.replace(/"/g, '&quot;')}">${r.label}</a>`, 'label');
     html += td(fmtUsd(r.usd_act));
     html += td(fmtUsd(r.usd_ly));
     html += td(fmtPct(r.usd_vs_ly), pctClass(r.usd_vs_ly));
+    html += td(fmtUsd(r.usd_bud));
+    html += td(fmtPct(r.usd_vs_bud), pctClass(r.usd_vs_bud));
     html += `<td></td>`;
     html += td(fmtNum(r.lit_act));
     html += td(fmtNum(r.lit_ly));
     html += td(fmtPct(r.lit_vs_ly), pctClass(r.lit_vs_ly));
+    html += td(fmtNum(r.lit_bud));
+    html += td(fmtPct(r.lit_vs_bud), pctClass(r.lit_vs_bud));
     html += `</tr>`;
   });
 

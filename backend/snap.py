@@ -2,9 +2,11 @@
 a ig_ventas (2026-10-19, pedido explícito de Ezequiel: conectar el SNAP y
 "configurar desde datos maestros qué se expone en cada línea"). Reemplaza
 el dataset mock estático (`public/ventas/colome-data.json`, clave `sbl_aug`/
-`sbl_ytd`) -- MISMO esquema de filas que consumía `snap.js`, pero sin
-columnas de Budget/Forecast (decisión confirmada 2026-10-09: "nunca existió
-un dato real, se saca").
+`sbl_ytd`) -- MISMO esquema de filas que consumía `snap.js`. Budget por
+línea agregado 2026-11-02 (ver `_agregado_budget_linea` más abajo) --
+revierte la decisión del 2026-10-09 ("nunca existió un dato real, se saca"),
+que se basaba en un archivo donde la columna SÍ venía vacía; el SNAP real
+que Ariel manda mes a mes SÍ trae Budget por línea.
 
 Jerarquía de totales (reconstruida comparando los números reales del mock
 el 2026-10-19, no inventada -- confirmado con Ezequiel):
@@ -129,6 +131,72 @@ def _budget_mensual() -> dict[str, list[float]]:
     if _budget_cache is None:
         _budget_cache = json.loads(BUDGET_RUTA.read_text(encoding="utf-8"))
     return _budget_cache
+
+
+# Budget POR LÍNEA de negocio (agregado 2026-11-02, Ezequiel: "en el snap
+# (hoja sales performance) tenia budget, y nosotros no lo cargamos" -- la
+# decisión del 2026-10-09 de sacar Budget de esta hoja se basaba en
+# `YTD - Snap - ly.xlsx`, donde la columna Budget SÍ venía vacía. El archivo
+# que Ezequiel compartió ahora (`SNAP I September 2026 - NM - VSP 2.xls`,
+# hoja "Sales by line of bussines") SÍ la trae poblada por línea, tanto en
+# el bloque Monthly como en el YTD -- la decisión anterior quedó obsoleta
+# para esta hoja en particular (el Budget TOTAL de Panel de Ventas, agregado
+# 2026-10-20 desde `Budget_Dinamico.xlsx`, es un source DISTINTO y sigue
+# vigente sin cambios, ver `_budget_mensual` arriba).
+#
+# Fuente: 2 reportes SNAP reales que Ariel manda mes a mes (`Informacion
+# recibida/SNAP I Aug 2026 - NM - vsp.xls`, `SNAP I September 2026 - NM -
+# VSP 2.xls`), bloque "Monthly" (filas 0-30 de la hoja, ANTES del bloque YTD
+# que repite las mismas etiquetas de fila más abajo -- un extractor ingenuo
+# que no corta en la fila "TOTAL SALES" del bloque Monthly termina leyendo
+# el valor YTD en vez del mensual, se pisan por nombre de fila igual).
+# Julio (2026-07, P01) no tiene reporte SNAP propio (el primer SNAP
+# recibido es de agosto) -- se derivó restando el bloque YTD del archivo de
+# agosto ("YTD: July 2026 to August 2026") menos su propio bloque Monthly
+# de agosto: Budget(jul) = Budget(YTD jul+ago) - Budget(ago). Validado
+# contra el propio archivo: ambos bloques ya vienen cuadrados internamente
+# (Domestic+Export+DTC = TOTAL SALES TO THIRD PARTIES en los 2 bloques).
+#
+# Nota: el TOTAL por línea de este archivo NO coincide centavo a centavo
+# con `budget_2026_2027.json` (~1.5-2% de diferencia en los meses donde se
+# pudo comparar) -- son 2 fuentes distintas del equipo de Ariel (una por
+# SKU/mes/canal reconstruida acá, otra el SNAP ya consolidado por él,
+# probablemente con un ajuste de precio posterior aplicado a una y no a la
+# otra) -- no se intentó reconciliar, cada tabla usa su propia fuente como
+# venía haciendo hasta ahora.
+#
+# Disponibilidad: SOLO los meses de los que Ariel ya mandó un SNAP real
+# (hoy jul-sep 2026) -- un mes sin fixture queda "n/d", mismo criterio que
+# LY/Budget total. Crece agregando una entrada por mes a medida que lleguen
+# más reportes (mismo patrón que `lfy_jul_ago_2025.json`).
+BUDGET_LINEA_RUTA = Path(__file__).parent / "budget_linea_2026_2027.json"
+_budget_linea_cache: dict[str, dict[str, list[float]]] | None = None
+
+
+def _budget_linea_mensual() -> dict[str, dict[str, list[float]]]:
+    global _budget_linea_cache
+    if _budget_linea_cache is None:
+        _budget_linea_cache = json.loads(BUDGET_LINEA_RUTA.read_text(encoding="utf-8"))
+    return _budget_linea_cache
+
+
+def _agregado_budget_linea(desde: date, hasta_incl: date) -> dict[str, list[float]] | None:
+    """Suma Budget por línea para [desde, hasta_incl] (meses calendario
+    completos, único patrón que usa `ventas_sbl`). `None` si falta la
+    fixture de ALGUNO de los meses del rango -- no se aproxima un rango
+    parcialmente cubierto, mismo criterio que LY."""
+    budget = _budget_linea_mensual()
+    acc: dict[str, list[float]] = {}
+    for anio, mes in _meses_en_rango(desde, hasta_incl):
+        periodo = f"{anio:04d}-{mes:02d}"
+        mes_data = budget.get(periodo)
+        if mes_data is None:
+            return None
+        for linea, v in mes_data.items():
+            a = acc.setdefault(linea, [0.0, 0.0])
+            a[0] += v[0]
+            a[1] += v[1]
+    return acc
 
 DOMESTIC_WHOLESALE = {"DBA", "DCBA", "DNOA"}
 EXPORT = {"EXPORTS"}
@@ -335,7 +403,8 @@ def _agregado_sbl(desde: date, hasta_incl: date, fdelmotte: bool = False) -> dic
 DTC_LINEAS_FIJAS = ["Employees", "E-commerce", "Colome Hotel", "Colome Visitor Center", "Cafayate Visitor Center"]
 
 
-def _fila(label: str, agg: dict[str, list[float]], ly: dict[str, list[float]] | None, sin_costeo: bool = False) -> dict:
+def _fila(label: str, agg: dict[str, list[float]], ly: dict[str, list[float]] | None, sin_costeo: bool = False,
+          bud: dict[str, list[float]] | None = None) -> dict:
     usd, cajas, costo_usd = agg.get(label, [0.0, 0.0, 0.0])
     # sin_costeo=True (Domestic/Export/AirLines, canal mayorista): el campo
     # costo_unit_mon_alt viene prácticamente vacío en Redline para ese canal
@@ -361,6 +430,17 @@ def _fila(label: str, agg: dict[str, list[float]], ly: dict[str, list[float]] | 
         out["lit_ly"] = None
         out["usd_vs_ly"] = "N/A"
         out["lit_vs_ly"] = "N/A"
+    if bud is not None and label in bud:
+        usd_bud, cajas_bud = bud[label]
+        out["usd_bud"] = round(usd_bud / 1000, 4)
+        out["lit_bud"] = round(cajas_bud, 4)
+        out["usd_vs_bud"] = (usd - usd_bud) / usd_bud if usd_bud else ("N/A" if usd == 0 else 1.0)
+        out["lit_vs_bud"] = (cajas - cajas_bud) / cajas_bud if cajas_bud else ("N/A" if cajas == 0 else 1.0)
+    else:
+        out["usd_bud"] = None
+        out["lit_bud"] = None
+        out["usd_vs_bud"] = "N/A"
+        out["lit_vs_bud"] = "N/A"
     return out
 
 
@@ -376,7 +456,8 @@ def _cero(label: str) -> dict:
     # así que 0.0 es un LY tan válido como el actual -- no un "no hay
     # dato", sino un "el dato real es cero".
     return {"label": label, "usd_act": 0.0, "lit_act": 0.0, "gm_act": "N/A",
-            "usd_ly": 0.0, "lit_ly": 0.0, "usd_vs_ly": "N/A", "lit_vs_ly": "N/A"}
+            "usd_ly": 0.0, "lit_ly": 0.0, "usd_vs_ly": "N/A", "lit_vs_ly": "N/A",
+            "usd_bud": 0.0, "lit_bud": 0.0, "usd_vs_bud": "N/A", "lit_vs_bud": "N/A"}
 
 
 def _sumar(label: str, filas: list[dict]) -> dict:
@@ -396,6 +477,19 @@ def _sumar(label: str, filas: list[dict]) -> dict:
         out["lit_ly"] = None
         out["usd_vs_ly"] = "N/A"
         out["lit_vs_ly"] = "N/A"
+    con_bud = all(f.get("usd_bud") is not None for f in filas) and len(filas) > 0
+    if con_bud:
+        usd_bud = round(sum(f["usd_bud"] for f in filas), 4)
+        lit_bud = round(sum(f["lit_bud"] for f in filas), 4)
+        out["usd_bud"] = usd_bud
+        out["lit_bud"] = lit_bud
+        out["usd_vs_bud"] = (usd - usd_bud) / usd_bud if usd_bud else ("N/A" if usd == 0 else 1.0)
+        out["lit_vs_bud"] = (lit - lit_bud) / lit_bud if lit_bud else ("N/A" if lit == 0 else 1.0)
+    else:
+        out["usd_bud"] = None
+        out["lit_bud"] = None
+        out["usd_vs_bud"] = "N/A"
+        out["lit_vs_bud"] = "N/A"
     return out
 
 
@@ -464,11 +558,16 @@ def ventas_sbl(desde: date, hasta_incl: date, fdelmotte: bool = False) -> list[d
     else:
         ly = _agregado_sbl_con_lfy(desde_ly, hasta_ly) if desde_ly >= LFY_DESDE else None
 
-    domestic = _fila("Grupo Colome Domestic", agg, ly, sin_costeo=True)
-    export_ = _fila("Grupo Colome Export", agg, ly, sin_costeo=True)
+    # Budget por línea: solo existe para la marca Colomé (el reporte SNAP de
+    # FdelMotte, cuando exista, es un universo aparte -- ver docstring de
+    # `_agregado_budget_linea` más arriba).
+    bud = _agregado_budget_linea(desde, hasta_incl) if not fdelmotte else None
+
+    domestic = _fila("Grupo Colome Domestic", agg, ly, sin_costeo=True, bud=bud)
+    export_ = _fila("Grupo Colome Export", agg, ly, sin_costeo=True, bud=bud)
     brand_total = _sumar("Total Grupo Colome Brand", [domestic, export_])
 
-    dtc_fijas = [_fila(l, agg, ly) for l in DTC_LINEAS_FIJAS]
+    dtc_fijas = [_fila(l, agg, ly, bud=bud) for l in DTC_LINEAS_FIJAS]
     dtc_channel = _sumar("Direct-to-consumer Channel", dtc_fijas)
 
     # "Sin clasificar" (2026-10-19, pedido explícito de Ezequiel) -- SIEMPRE
@@ -476,8 +575,11 @@ def ventas_sbl(desde: date, hasta_incl: date, fdelmotte: bool = False) -> list[d
     # escondida. Hermano de Brand/DTC/BOB en TOTAL SALES TO THIRD PARTIES,
     # no anidado dentro de Direct-to-consumer Channel (puede venir de DTC/
     # HOSPITALIDAD sin regla matcheada O de una categoria completamente
-    # fuera de las 6 conocidas -- ver _agregado_sbl).
-    sin_clasificar = _fila("Sin clasificar", agg, ly)
+    # fuera de las 6 conocidas -- ver _agregado_sbl). No tiene fila propia
+    # en el SNAP real -- Budget fijo en 0 (igual que BOB/Intercompany vía
+    # `_cero`), para no tirar a "n/d" el Budget de TOTAL SALES TO THIRD
+    # PARTIES/TOTAL SALES por un residuo que de por sí casi siempre es 0.
+    sin_clasificar = _fila("Sin clasificar", agg, ly, bud={"Sin clasificar": [0.0, 0.0]})
 
     bob_rows = [_cero(l) for l in ("Others",)]
     bob_total = _sumar("Total Buyers Own Brand (BOB)", bob_rows)
