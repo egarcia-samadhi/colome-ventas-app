@@ -3,6 +3,19 @@
   'use strict';
   const FACTS = JSON.parse(document.getElementById('colome-facts').textContent);
   const D = FACTS.dims, F = FACTS.facts;
+  // FIX REAL 2026-11-02: snap.js pasó a fábrica de instancias (Consolidado +
+  // FdelMotte, ver snap.js::crearSnapInstance) y su `RAW` quedó local a cada
+  // instancia -- este archivo seguía leyendo un `RAW` global que ya no
+  // existe. lyMes()/snapRef() más abajo tiraban ReferenceError dentro de
+  // renderPanel(), que se llama sin try/catch ANTES de show() y antes de
+  // registrar el listener de hashchange -- el resto del script nunca
+  // terminaba de correr, así que el nav (Panel/Región/Sales Performance)
+  // quedaba roto desde el primer ingreso: cualquier pestaña que se
+  // clickeara, la URL/resaltado cambiaban pero el contenido quedaba
+  // congelado en lo que ya estuviera visible. RAW acá es siempre el de
+  // Consolidado (colome-data): Panel de Ventas y Ventas por Región muestran
+  // cifras consolidadas, nunca el universo FdelMotte.
+  const RAW = JSON.parse(document.getElementById('colome-data').textContent);
   const I = { periodo: 0, mercado: 1, categoria: 2, canal: 3, zona: 4, pais: 5, provincia: 6, brand: 7, producto: 8, cliente: 9 };
   const MESES = ['Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'];
   const PERIODOS = Array.from({ length: 12 }, (_, i) => 'P' + String(i + 1).padStart(2, '0'));
@@ -705,7 +718,14 @@
     });
   });
 
-  renderPanel();
+  // BLINDAJE 2026-11-02: renderPanel() corre siempre acá, aunque la vista
+  // inicial sea Sales Performance -- si algo dentro tira (como pasó con el
+  // bug de RAW de arriba), un throw sin capturar frenaba TODO lo que sigue
+  // en este script, incluyendo show() (decide qué pestaña mostrar) y el
+  // addEventListener('hashchange') (lo que hace que cambiar de pestaña
+  // funcione). Nunca más: un error en el render inicial de Panel no puede
+  // dejar sordo al nav entero.
+  try { renderPanel(); } catch (e) { console.error('renderPanel() inicial falló:', e); }
   show((location.hash || '').replace('#', ''));
   // Los 3 pills de Ventas ahora viven en el nav compartido (AppShell, fuera
   // de este script) y navegan por hash plano (<a href="/#snap"> etc, ver
