@@ -641,6 +641,45 @@ navegación COMPLETA de forma silenciosa (sin error visible en pantalla,
 solo en consola). Re-clickear el nav de las 3 pestañas en vivo después
 de cualquier cambio en estos dos archivos, no alcanza con que compile.
 
+## Budget real por línea en Sales by Line of Business (agregado 2026-11-02)
+
+Revierte la decisión del 2026-10-09 ("Budget sacado, nunca existió un dato
+real") -- se basaba en `YTD - Snap - ly.xlsx`, donde esa columna venía
+vacía. Ezequiel compartió `SNAP I September 2026 - NM - VSP 2.xls`, hoja
+"Sales by line of bussines": ahí SÍ viene poblada por línea de negocio
+(Monthly y YTD). No afecta el Budget TOTAL de Panel de Ventas
+(`budget_2026_2027.json`, fuente `Budget_Dinamico.xlsx`) -- son 2 fuentes
+distintas, con un ~1.5-2% de diferencia en el total entre ambas, no
+reconciliadas.
+
+- **Fixture:** `backend/budget_linea_2026_2027.json` -- `{periodo YYYY-MM:
+  {línea: [usd, cajas]}}`, cubre jul-sep 2026 (los 3 meses de los que ya
+  hay SNAP real -- julio derivado restando YTD(jul+ago) - Monthly(ago) del
+  archivo de agosto). Extractor: hoja "Sales by line of bussines", SOLO el
+  bloque Monthly (filas 0-30 -- el bloque YTD de abajo repite los mismos
+  nombres de fila), columna C = Budget USD (000s), columna I = Budget 9L.
+  Crece agregando una entrada por mes a medida que lleguen más SNAP de
+  Ariel (mismo patrón que `lfy_jul_ago_2025.json`).
+- **Backend (`snap.py`):** `_agregado_budget_linea(desde, hasta_incl)` suma
+  por rango de meses calendario -- `None` si falta la fixture de algún mes
+  del rango (nunca aproxima un rango parcialmente cubierto). `_fila()`/
+  `_sumar()` extendidas con `usd_bud`/`lit_bud`/`usd_vs_bud`/`lit_vs_bud`,
+  mismo patrón que ya usan para Last Year. "Sin clasificar" (sin fila
+  propia en el SNAP real) queda fijo en Budget=0, igual que BOB/
+  Intercompany vía `_cero()` -- si no, el Budget de TOTAL SALES TO THIRD
+  PARTIES/TOTAL SALES caería a "n/d" por ese residuo. `fdelmotte=True`
+  nunca tiene Budget por línea (no hay reporte SNAP propio de FdelMotte).
+- **Frontend (`snap.js::renderSbl`):** columnas Budget/% vs Bud agregadas
+  a la tabla de Sales by Line of Business (Sales Value y 9 Litre
+  Equivalent), mismo patrón visual que la Tabla comparativa anual de
+  Panel de Ventas.
+
+Verificado en vivo contra Sep 2026 real: Domestic $477k/8.455 cajas,
+Export $455k/8.408 cajas, E-commerce $28k/377 cajas, Colome Hotel
+$3k/11 cajas, Colome Visitor Center $11k/60 cajas, Cafayate Visitor
+Center $11k/79 cajas -- exacto contra el Excel. Detalle completo en
+memoria de Claude, `proyecto_colome_ventas_budget_por_linea_snap`.
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com
