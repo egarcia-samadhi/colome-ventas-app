@@ -716,3 +716,54 @@ def ventas_por_vendedor(desde: date, hasta_incl: date) -> list[dict]:
         })
     out.sort(key=lambda r: (r["rubro"], r["d_articulo"], r["vendedor"], r["periodo"]))
     return out
+
+
+def detalle_por_factura(
+    desde: date, hasta_incl: date, *,
+    cliente: str | None = None, c_articulo: str | None = None, vendedor: str | None = None,
+) -> list[dict]:
+    """Otros Análisis -> Por Cliente/SKU/Vendedor: "composición en ventana
+    flotante" (pedido explícito de Ezequiel 2026-11-02, "por factura").
+    Click en una fila del ranking/tabla abre un popup con las facturas
+    REALES que componen ese total -- mismo patrón que el popup "Sales by
+    Market" de Sales Performance, pero a nivel factura en vez de mercado.
+
+    Agrega por (comprobante, número, fecha) -- UNA fila por factura, aunque
+    esa factura tenga más de una línea dentro del filtro pedido (ej. 2
+    artículos distintos de la misma marca en una sola factura del cliente
+    clickeado) -- "por factura" es el nivel de composición pedido, no
+    línea por línea. `cliente`/`c_articulo`/`vendedor` son filtros
+    opcionales combinables (el caller pasa los que correspondan según
+    desde qué fila se abrió el popup: Por Cliente pasa `cliente`, Por SKU
+    pasa `c_articulo`, Por Vendedor puede pasar `c_articulo`+`vendedor`
+    juntos para la celda específica clickeada)."""
+    acc: dict[tuple[str, str | None, str], list] = {}
+    for it in _lineas_vinos(desde, hasta_incl):
+        if cliente is not None and (it.get("n_cliente") or "Sin cliente") != cliente:
+            continue
+        if c_articulo is not None and (it.get("c_articulo") or "") != c_articulo:
+            continue
+        if vendedor is not None and (it.get("n_vendedor") or "Sin vendedor") != vendedor:
+            continue
+        fecha = (it.get("fecha") or "")[:10]
+        key = (it.get("d_comprobante") or "Sin comprobante", it.get("numero"), fecha)
+        a = acc.setdefault(key, [
+            0.0, 0.0, 0.0, 0.0,
+            it.get("n_cliente") or "Sin cliente", it.get("n_vendedor") or "Sin vendedor", set(),
+        ])
+        cantidad = float(it.get("cantidad") or 0)
+        a[0] += float(it.get("cantidad_cajas9l") or 0)
+        a[1] += cantidad
+        a[2] += float(it.get("valor_mon_loc") or 0)
+        a[3] += float(it.get("m_desc_total") or 0)
+        a[6].add(it.get("d_articulo") or "Sin artículo")
+    out = []
+    for (comprobante, numero, fecha), (cajas, cantidad, ars, descuento, cli, vend, articulos) in acc.items():
+        out.append({
+            "comprobante": comprobante, "numero": numero, "fecha": fecha,
+            "cliente": cli, "vendedor": vend, "articulos": ", ".join(sorted(articulos)),
+            "cajas": round(cajas, 4), "cantidad": round(cantidad, 2),
+            "ars": round(ars, 2), "descuento": round(descuento, 2),
+        })
+    out.sort(key=lambda r: r["fecha"])
+    return out

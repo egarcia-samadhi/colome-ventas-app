@@ -26,12 +26,21 @@
   `desde`/`hasta` libre -- `periodo` (YYYY-MM) queda SOLO como el valor
   default cuando no se manda rango (mes calendario anterior, igual que
   antes). Ver `ventas_por_sku`/`ventas_por_vendedor` en ig_ventas.py para
-  el detalle de qué cambió en cada una."""
+  el detalle de qué cambió en cada una.
+
+- Composición "por factura" en ventana flotante (2026-11-02, pedido
+  explícito de Ezequiel: "por cliente, por sku y por vendedor, podremos
+  mostrar la composicion en una ventana flotante?" -> "por factura"):
+  `/detalle-facturas` -- mismo rango libre, filtros opcionales
+  cliente/c_articulo/vendedor combinables. Ver `detalle_por_factura` en
+  ig_ventas.py."""
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from ig_ventas import desglose_por_grupo, ventas_por_cliente, ventas_por_sku, ventas_por_vendedor
+from ig_ventas import (
+    desglose_por_grupo, detalle_por_factura, ventas_por_cliente, ventas_por_sku, ventas_por_vendedor,
+)
 
 router = APIRouter(prefix="/api/otros-analisis", tags=["otros-analisis"])
 
@@ -113,3 +122,19 @@ async def por_vendedor(
         desde_d, hasta_d = _rango_mes(_periodo_default())
     rows = ventas_por_vendedor(desde_d, hasta_d)
     return {"desde": desde_d.isoformat(), "hasta": hasta_d.isoformat(), "rows": rows}
+
+
+@router.get("/detalle-facturas")
+async def detalle_facturas(
+    desde: str = Query(..., description="YYYY-MM-DD"),
+    hasta: str = Query(..., description="YYYY-MM-DD inclusive"),
+    cliente: str | None = Query(None),
+    c_articulo: str | None = Query(None),
+    vendedor: str | None = Query(None),
+    user=Depends(require_reader),
+):
+    if not (cliente or c_articulo or vendedor):
+        raise HTTPException(status_code=400, detail="falta cliente, c_articulo o vendedor")
+    desde_d, hasta_d = date.fromisoformat(desde), date.fromisoformat(hasta)
+    rows = detalle_por_factura(desde_d, hasta_d, cliente=cliente, c_articulo=c_articulo, vendedor=vendedor)
+    return {"rows": rows}
