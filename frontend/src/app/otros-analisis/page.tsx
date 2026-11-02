@@ -46,45 +46,21 @@ import { AppShell } from "@/components/AppShell";
 // una columna de la tabla). Período pasa de un selector de un solo mes a
 // un rango de fechas libre. Se agrega "Descuento Comercial" (antes "% Desc
 // C" se omitía -- ver docstring de `ventas_por_cliente` en ig_ventas.py
-// para el campo real encontrado, `m_desc_total`). Por SKU/Por Vendedor NO
-// se tocan, siguen con el diseño anterior (Ariel solo pidió esto para Por
-// Cliente).
+// para el campo real encontrado, `m_desc_total`).
+//
+// Por SKU y Por Vendedor, mismo día, 2 pedidos más de Ariel (ver
+// comentarios en cada componente más abajo): también pasan a rango de
+// fechas libre + Descuento Comercial. Por SKU gana un ranking de productos
+// con Marca/Mercado como segmentadores + Precio Promedio. Por Vendedor
+// corrige un bug real de UX en los chips (ver `ChipsFiltro::onSoloEste`) y
+// suma un drill-down de tendencia por período cuando se aísla 1 vendedor.
 
 interface FilaCliente { vendedor: string; canal: string; cliente: string; cajas: number; cantidad: number; ars: number; descuento: number; mg_pct: number }
-interface FilaSku { rubro: string; c_articulo: string; d_articulo: string; oficina: string; cajas: number; mg_pct: number }
-interface FilaVendedor { rubro: string; c_articulo: string; d_articulo: string; vendedor: string; cantidad: number; ars: number; mg_pct: number }
+interface FilaSku { rubro: string; c_articulo: string; d_articulo: string; oficina: string; cajas: number; cantidad: number; ars: number; descuento: number; mg_pct: number }
+interface FilaVendedor { rubro: string; c_articulo: string; d_articulo: string; vendedor: string; periodo: string; cantidad: number; ars: number; descuento: number; mg_pct: number }
 
 const fmtNum = (n: number) =>
   n === 0 ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-
-function ultimosPeriodos(cantidad = 24): string[] {
-  const hoy = new Date();
-  const out: string[] = [];
-  for (let i = 1; i <= cantidad; i++) {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
-    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-  }
-  return out;
-}
-
-// Todos los controles de filtro de esta pantalla viven en el SIDEBAR
-// (fondo oscuro #2b2d31 del AppShell) -- estilos propios, distintos de los
-// inputs claros que usa el resto de las tarjetas.
-function PeriodoSelect({ periodo, onChange }: { periodo: string; onChange: (p: string) => void }) {
-  const periodos = ultimosPeriodos();
-  return (
-    <div>
-      <label className="block text-[10px] uppercase tracking-wide text-white/40 mb-1.5">Período</label>
-      <select
-        value={periodo}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-2.5 py-1.5 rounded-md border border-white/15 text-sm bg-white/5 text-white [&>option]:text-[#1c1811]"
-      >
-        {periodos.map((p) => <option key={p} value={p}>{p}</option>)}
-      </select>
-    </div>
-  );
-}
 
 function mesCerradoAnteriorRango(): { desde: string; hasta: string } {
   const hoy = new Date();
@@ -96,9 +72,8 @@ function mesCerradoAnteriorRango(): { desde: string; hasta: string } {
   return { desde: fmt(desde), hasta: fmt(hasta) };
 }
 
-// Rango de fechas libre (pedido de Ariel Culasso 2026-11-02, "Por Cliente"):
-// reemplaza el PeriodoSelect de un solo mes en esa vista puntual -- Por
-// SKU/Por Vendedor siguen con PeriodoSelect sin cambios.
+// Rango de fechas libre (pedido de Ariel Culasso 2026-11-02 en las 3
+// vistas): reemplaza el selector de un solo mes que tenían antes.
 function RangoFechas({ desde, hasta, onChange }: { desde: string; hasta: string; onChange: (desde: string, hasta: string) => void }) {
   return (
     <div>
@@ -149,8 +124,13 @@ function BuscadorTexto({ valor, onChange, placeholder, label }: { valor: string;
 // Ezequiel 2026-10-19: "sacalo como pildora y ponelo con checkbox como
 // esta en panel de ventas"). Mismo dorado (#DCBE84/#b8975a) que usa esa
 // pantalla para el estado marcado.
-function ChipsFiltro({ label, opciones, ocultos, onToggle, onMostrarTodos }: {
+function ChipsFiltro({ label, opciones, ocultos, onToggle, onMostrarTodos, onSoloEste }: {
   label: string; opciones: string[]; ocultos: Set<string>; onToggle: (v: string) => void; onMostrarTodos: () => void;
+  // "Solo" (agregado 2026-11-02, Ariel Culasso: "al seleccionar uno lo
+  // desmarca... si quiero ver uno en particular tengo que desmarcar todos
+  // uno a uno") -- un click aísla ESE valor (muestra solo ese, oculta el
+  // resto) sin tener que destildar manualmente cada chip restante.
+  onSoloEste?: (v: string) => void;
 }) {
   if (opciones.length === 0) return null;
   return (
@@ -165,22 +145,32 @@ function ChipsFiltro({ label, opciones, ocultos, onToggle, onMostrarTodos }: {
         {opciones.map((v) => {
           const activo = !ocultos.has(v);
           return (
-            <label
+            <div
               key={v}
-              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-[10px] text-[12px] cursor-pointer transition ${
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-[10px] text-[12px] transition ${
                 activo
                   ? "bg-gradient-to-br from-[#e7cd9c] to-[#DCBE84] text-[#1c1811] font-semibold"
                   : "bg-white/5 text-white/75 hover:bg-white/10"
               }`}
             >
-              <input
-                type="checkbox"
-                checked={activo}
-                onChange={() => onToggle(v)}
-                className="accent-[#b8975a] shrink-0"
-              />
-              {v}
-            </label>
+              <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                <input
+                  type="checkbox"
+                  checked={activo}
+                  onChange={() => onToggle(v)}
+                  className="accent-[#b8975a] shrink-0"
+                />
+                <span className="truncate">{v}</span>
+              </label>
+              {onSoloEste && (
+                <button
+                  onClick={() => onSoloEste(v)}
+                  className={`text-[10px] underline shrink-0 ${activo ? "text-[#1c1811]/60 hover:text-[#1c1811]" : "text-white/40 hover:text-white"}`}
+                >
+                  solo
+                </button>
+              )}
+            </div>
           );
         })}
       </div>
@@ -190,29 +180,6 @@ function ChipsFiltro({ label, opciones, ocultos, onToggle, onMostrarTodos }: {
 
 const normalizar = (s: string) => s.toLowerCase();
 const porNombre = (a: string, b: string) => a.localeCompare(b, "es");
-
-function useOtrosAnalisis<T>(endpoint: string, periodo: string) {
-  const [rows, setRows] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    fetch(`/api/otros-analisis/${endpoint}?periodo=${periodo}`)
-      .then((r) => {
-        if (r.status === 401) { window.location.href = "/"; return null; }
-        if (!r.ok) throw new Error(`Error cargando ${endpoint}`);
-        return r.json();
-      })
-      .then((d) => { if (d) setRows(d.rows); })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [endpoint, periodo]);
-
-  useEffect(load, [load]);
-  return { rows, loading, error };
-}
 
 function useOtrosAnalisisRango<T>(endpoint: string, desde: string, hasta: string) {
   const [rows, setRows] = useState<T[]>([]);
@@ -289,6 +256,7 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
           ocultos={segmentoOcultos}
           onToggle={toggleSegmento}
           onMostrarTodos={() => setSegmentoOcultos(new Set())}
+          onSoloEste={(v) => setSegmentoOcultos(new Set(opcionesSegmento.filter((o) => o !== v)))}
         />
       </div>
     );
@@ -371,54 +339,82 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
   );
 }
 
+// Por SKU REDISEÑADO 2026-11-02 (pedido de Ariel Culasso vía Ezequiel,
+// "sí, tal cual lo pide"): Rubro ("Marca") y Oficina ("Mercado") dejan de
+// ser columna fija/pivot -- pasan a ser DOS segmentadores independientes
+// (chips de filtro simultáneos, no un toggle como Vendedor/Canal en Por
+// Cliente -- acá ambas dimensiones tienen sentido filtradas a la vez). La
+// tabla pasa a ranking de PRODUCTOS (agregado por artículo, sumando a
+// través de lo que quede después de filtrar Marca/Mercado), con Descuento
+// Comercial y Precio Promedio (Venta Neta ARS / Cajas9l) agregados.
 function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
-  const [periodo, setPeriodo] = useState(ultimosPeriodos()[0]);
+  const [{ desde: desdeDefault, hasta: hastaDefault }] = useState(mesCerradoAnteriorRango());
+  const [desde, setDesde] = useState(desdeDefault);
+  const [hasta, setHasta] = useState(hastaDefault);
   const [busqueda, setBusqueda] = useState("");
-  const { rows, loading, error } = useOtrosAnalisis<FilaSku>("por-sku", periodo);
+  const [marcasOcultas, setMarcasOcultas] = useState<Set<string>>(new Set());
+  const [mercadosOcultos, setMercadosOcultos] = useState<Set<string>>(new Set());
+  const { rows, loading, error } = useOtrosAnalisisRango<FilaSku>("por-sku", desde, hasta);
+
+  const marcas = [...new Set(rows.map((r) => r.rubro))].sort(porNombre);
+  const mercados = [...new Set(rows.map((r) => r.oficina))].sort(porNombre);
+  const toggleSet = (set: Set<string>, setter: (s: Set<string>) => void) => (v: string) => {
+    const next = new Set(set);
+    if (next.has(v)) next.delete(v); else next.add(v);
+    setter(next);
+  };
 
   useEffect(() => {
     onFiltros(
       <div className="space-y-4">
-        <PeriodoSelect periodo={periodo} onChange={setPeriodo} />
-        <BuscadorTexto valor={busqueda} onChange={setBusqueda} placeholder="Rubro o artículo…" label="Buscar" />
+        <RangoFechas desde={desde} hasta={hasta} onChange={(d, h) => { setDesde(d); setHasta(h); }} />
+        <BuscadorTexto valor={busqueda} onChange={setBusqueda} placeholder="Artículo…" label="Buscar" />
+        <ChipsFiltro
+          label="Marca"
+          opciones={marcas}
+          ocultos={marcasOcultas}
+          onToggle={toggleSet(marcasOcultas, setMarcasOcultas)}
+          onMostrarTodos={() => setMarcasOcultas(new Set())}
+          onSoloEste={(v) => setMarcasOcultas(new Set(marcas.filter((m) => m !== v)))}
+        />
+        <ChipsFiltro
+          label="Mercado"
+          opciones={mercados}
+          ocultos={mercadosOcultos}
+          onToggle={toggleSet(mercadosOcultos, setMercadosOcultos)}
+          onMostrarTodos={() => setMercadosOcultos(new Set())}
+          onSoloEste={(v) => setMercadosOcultos(new Set(mercados.filter((m) => m !== v)))}
+        />
       </div>
     );
-  }, [periodo, busqueda, onFiltros]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desde, hasta, busqueda, marcasOcultas, mercadosOcultos, onFiltros, marcas.join("|"), mercados.join("|")]);
 
   const texto = normalizar(busqueda.trim());
-  const filtradas = texto
-    ? rows.filter((r) => normalizar(r.rubro).includes(texto) || normalizar(r.d_articulo).includes(texto))
-    : rows;
+  const filtradas = rows.filter((r) => {
+    if (marcasOcultas.has(r.rubro) || mercadosOcultos.has(r.oficina)) return false;
+    if (texto && !normalizar(r.d_articulo).includes(texto)) return false;
+    return true;
+  });
 
-  const oficinasSet = new Set<string>();
-  filtradas.forEach((r) => oficinasSet.add(r.oficina));
-  const orden = ["MERCADO EXTERNO", "MERCADO INTERNO"];
-  const oficinas = [...orden.filter((o) => oficinasSet.has(o)), ...[...oficinasSet].filter((o) => !orden.includes(o))];
-
-  const rubros = new Map<string, Map<string, { d_articulo: string; porOficina: Map<string, { cajas: number }> }>>();
+  const porProducto = new Map<string, { c_articulo: string; d_articulo: string; cajas: number; cantidad: number; ars: number; descuento: number }>();
   for (const r of filtradas) {
-    if (!rubros.has(r.rubro)) rubros.set(r.rubro, new Map());
-    const arts = rubros.get(r.rubro)!;
     const key = `${r.c_articulo}::${r.d_articulo}`;
-    if (!arts.has(key)) arts.set(key, { d_articulo: r.d_articulo, porOficina: new Map() });
-    arts.get(key)!.porOficina.set(r.oficina, { cajas: r.cajas });
+    const acc = porProducto.get(key) ?? { c_articulo: r.c_articulo, d_articulo: r.d_articulo, cajas: 0, cantidad: 0, ars: 0, descuento: 0 };
+    acc.cajas += r.cajas;
+    acc.cantidad += r.cantidad;
+    acc.ars += r.ars;
+    acc.descuento += r.descuento;
+    porProducto.set(key, acc);
   }
-
-  const grupos = [...rubros.entries()].map(([rubro, arts]) => {
-    const filas = [...arts.entries()].map(([key, v]) => {
-      const [c_articulo] = key.split("::");
-      const totalCajas = [...v.porOficina.values()].reduce((a, o) => a + o.cajas, 0);
-      return { c_articulo, d_articulo: v.d_articulo, porOficina: v.porOficina, totalCajas };
-    }).sort((a, b) => porNombre(a.d_articulo, b.d_articulo));
-    const totalRubroCajas = filas.reduce((a, f) => a + f.totalCajas, 0);
-    return { rubro, filas, totalRubroCajas };
-  }).sort((a, b) => porNombre(a.rubro, b.rubro));
+  const ranking = [...porProducto.values()].sort((a, b) => b.ars - a.ars);
+  const total = ranking.reduce((a, f) => ({ cajas: a.cajas + f.cajas, ars: a.ars + f.ars, descuento: a.descuento + f.descuento }), { cajas: 0, ars: 0, descuento: 0 });
 
   return (
     <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-[#1c1811]">Por SKU</h3>
-        <p className="text-[11px] text-[#847c68] mt-0.5">Cajas9l por artículo, separado por mercado externo/interno.</p>
+        <p className="text-[11px] text-[#847c68] mt-0.5">Ranking de productos (ventas VINOS), Venta Neta y Descuento Comercial en ARS. Filtrar por Marca/Mercado en el sidebar.</p>
       </div>
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
       {loading ? (
@@ -428,41 +424,38 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-[#f7f5f0]">
-                <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Rubro</th>
+                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">#</th>
                 <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">Artículo</th>
-                {oficinas.map((o) => (
-                  <th key={o} className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">{o}</th>
-                ))}
-                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">Total Cajas9l</th>
+                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cajas9l</th>
+                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
+                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Descuento Comercial</th>
+                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Precio Promedio (por Caja9l)</th>
               </tr>
             </thead>
             <tbody>
-              {grupos.length === 0 ? (
-                <tr><td colSpan={3 + oficinas.length} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
-              ) : grupos.map((g) => (
-                <Fragment key={g.rubro}>
-                  {g.filas.map((f, i) => (
-                    <tr key={`${g.rubro}::${f.c_articulo}`} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
-                      {i === 0 && (
-                        <td rowSpan={g.filas.length} className="py-1.5 px-3 text-[#1c1811] align-top font-medium">{g.rubro}</td>
-                      )}
+              {ranking.length === 0 ? (
+                <tr><td colSpan={6} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
+              ) : (
+                <>
+                  {ranking.map((f, i) => (
+                    <tr key={`${f.c_articulo}::${f.d_articulo}`} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
+                      <td className="py-1.5 px-3 text-right tabular-nums text-[#847c68]">{i + 1}</td>
                       <td className="py-1.5 px-3 text-[#1c1811] border-l border-[#f3efe4]">{f.d_articulo}</td>
-                      {oficinas.map((o) => {
-                        const v = f.porOficina.get(o);
-                        return (
-                          <td key={o} className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{v ? fmtNum(v.cajas) : "—"}</td>
-                        );
-                      })}
-                      <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4] font-medium">{fmtNum(f.totalCajas)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.descuento)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{f.cajas ? fmtNum(f.ars / f.cajas) : "—"}</td>
                     </tr>
                   ))}
                   <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
-                    <td className="py-1.5 px-3 text-[#1c1811]" colSpan={2}>Total {g.rubro}</td>
-                    {oficinas.map((o) => <td key={o} className="border-l border-[#ece6d8]" />)}
-                    <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{fmtNum(g.totalRubroCajas)}</td>
+                    <td className="py-1.5 px-3" colSpan={2}>Total</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.cajas)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.ars)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.descuento)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{total.cajas ? fmtNum(total.ars / total.cajas) : "—"}</td>
                   </tr>
-                </Fragment>
-              ))}
+                </>
+              )}
             </tbody>
           </table>
         </div>
@@ -471,11 +464,31 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
   );
 }
 
+// Por Vendedor REDISEÑADO 2026-11-02 (pedido de Ariel Culasso vía Ezequiel,
+// "sí, tal cual lo pide"):
+// 1. Bug de UX real corregido: el criterio de los chips (tildado=visible)
+//    obligaba a destildar TODOS los demás vendedores uno a uno para ver
+//    uno solo ("me fue dificultoso seleccionar un vendedor particular...
+//    debemos cambiar el criterio"). Se agrega "solo" (ver `ChipsFiltro`,
+//    `onSoloEste`) -- un click aísla un vendedor sin tocar el resto.
+// 2. Rango de fechas libre, vista acumulada (la tabla principal sigue
+//    sumando TODO el rango, como antes).
+// 3. Drill-down: cuando queda UN SOLO vendedor visible (vía "solo" o
+//    destildando manualmente al resto), aparece debajo una tabla de
+//    "Tendencia por período" para ESE vendedor -- usa el campo `periodo`
+//    que ahora viaja en cada fila (agregado en ig_ventas.py), sin pedir un
+//    endpoint aparte.
+// 4. Descuento Comercial agregado como 3ra sub-columna por vendedor
+//    (Cantidad / Desc. Comercial / Venta Neta) -- Ariel pidió explícito
+//    "cantidad, desc comercial, neto". Margen queda para una iteración
+//    futura (Ariel: "dps le agregaremos el margen").
 function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
-  const [periodo, setPeriodo] = useState(ultimosPeriodos()[0]);
+  const [{ desde: desdeDefault, hasta: hastaDefault }] = useState(mesCerradoAnteriorRango());
+  const [desde, setDesde] = useState(desdeDefault);
+  const [hasta, setHasta] = useState(hastaDefault);
   const [busqueda, setBusqueda] = useState("");
   const [vendedoresOcultos, setVendedoresOcultos] = useState<Set<string>>(new Set());
-  const { rows, loading, error } = useOtrosAnalisis<FilaVendedor>("por-vendedor", periodo);
+  const { rows, loading, error } = useOtrosAnalisisRango<FilaVendedor>("por-vendedor", desde, hasta);
 
   // Chips de vendedor para elegir qué columnas mostrar -- la tabla pivotea
   // un vendedor por columna y con ~10 vendedores queda ilegible de ancha
@@ -491,7 +504,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
   useEffect(() => {
     onFiltros(
       <div className="space-y-4">
-        <PeriodoSelect periodo={periodo} onChange={setPeriodo} />
+        <RangoFechas desde={desde} hasta={hasta} onChange={(d, h) => { setDesde(d); setHasta(h); }} />
         <BuscadorTexto valor={busqueda} onChange={setBusqueda} placeholder="Rubro o artículo…" label="Buscar" />
         <ChipsFiltro
           label="Vendedores"
@@ -499,11 +512,12 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
           ocultos={vendedoresOcultos}
           onToggle={toggleVendedor}
           onMostrarTodos={() => setVendedoresOcultos(new Set())}
+          onSoloEste={(v) => setVendedoresOcultos(new Set(todosVendedores.filter((x) => x !== v)))}
         />
       </div>
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodo, busqueda, vendedoresOcultos, onFiltros, todosVendedores.join("|")]);
+  }, [desde, hasta, busqueda, vendedoresOcultos, onFiltros, todosVendedores.join("|")]);
 
   const texto = normalizar(busqueda.trim());
   const filtradas = rows.filter((r) => {
@@ -514,13 +528,16 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
 
   const vendedores = [...new Set(filtradas.map((r) => r.vendedor))].sort(porNombre);
 
-  const rubros = new Map<string, Map<string, { d_articulo: string; porVendedor: Map<string, { cantidad: number; ars: number; mg_pct: number }> }>>();
+  const rubros = new Map<string, Map<string, { d_articulo: string; porVendedor: Map<string, { cantidad: number; ars: number; descuento: number }> }>>();
   for (const r of filtradas) {
     if (!rubros.has(r.rubro)) rubros.set(r.rubro, new Map());
     const arts = rubros.get(r.rubro)!;
     const key = `${r.c_articulo}::${r.d_articulo}`;
     if (!arts.has(key)) arts.set(key, { d_articulo: r.d_articulo, porVendedor: new Map() });
-    arts.get(key)!.porVendedor.set(r.vendedor, { cantidad: r.cantidad, ars: r.ars, mg_pct: r.mg_pct });
+    const prev = arts.get(key)!.porVendedor.get(r.vendedor) ?? { cantidad: 0, ars: 0, descuento: 0 };
+    arts.get(key)!.porVendedor.set(r.vendedor, {
+      cantidad: prev.cantidad + r.cantidad, ars: prev.ars + r.ars, descuento: prev.descuento + r.descuento,
+    });
   }
 
   const grupos = [...rubros.entries()].map(([rubro, arts]) => {
@@ -533,69 +550,120 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
     return { rubro, filas, totalRubroArs };
   }).sort((a, b) => porNombre(a.rubro, b.rubro));
 
+  // Drill-down: SOLO cuando queda exactamente 1 vendedor visible -- "la
+  // tendencia por el período seleccionado" de ESE vendedor, agrupado por
+  // mes calendario (campo `periodo` de cada fila).
+  const vendedorAislado = vendedores.length === 1 ? vendedores[0] : null;
+  const tendencia = vendedorAislado
+    ? [...(() => {
+        const porPeriodo = new Map<string, { periodo: string; cantidad: number; ars: number; descuento: number }>();
+        for (const r of filtradas) {
+          const acc = porPeriodo.get(r.periodo) ?? { periodo: r.periodo, cantidad: 0, ars: 0, descuento: 0 };
+          acc.cantidad += r.cantidad; acc.ars += r.ars; acc.descuento += r.descuento;
+          porPeriodo.set(r.periodo, acc);
+        }
+        return porPeriodo.values();
+      })()].sort((a, b) => a.periodo.localeCompare(b.periodo))
+    : [];
+
   return (
-    <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-[#1c1811]">Por Vendedor</h3>
-        <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad y Venta Neta (ARS) por artículo, separado por vendedor.</p>
-      </div>
-      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-      {loading ? (
-        <div className="h-64 rounded-md bg-[#f7f5f0] animate-pulse" />
-      ) : (
-        <div className="overflow-x-auto rounded-md border border-[#ece6d8]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-[#f7f5f0]">
-                <th rowSpan={2} className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] align-bottom whitespace-nowrap">Rubro</th>
-                <th rowSpan={2} className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] align-bottom whitespace-nowrap border-l border-[#ece6d8]">Artículo</th>
-                {vendedores.map((v) => (
-                  <th key={v} colSpan={2} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8] whitespace-nowrap">{v}</th>
-                ))}
-                <th colSpan={1} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">Total</th>
-              </tr>
-              <tr className="bg-[#f7f5f0]">
-                {vendedores.map((v) => (
-                  <Fragment key={v}>
-                    <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] border-l border-[#ece6d8]">Cant.</th>
-                    <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">Venta Neta</th>
+    <div className="space-y-5">
+      <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-[#1c1811]">Por Vendedor</h3>
+          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad, Descuento Comercial y Venta Neta (ARS) por artículo, separado por vendedor. Vista acumulada del rango -- aislá un vendedor ("solo" en el sidebar) para ver su tendencia por período.</p>
+        </div>
+        {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+        {loading ? (
+          <div className="h-64 rounded-md bg-[#f7f5f0] animate-pulse" />
+        ) : (
+          <div className="overflow-x-auto rounded-md border border-[#ece6d8]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#f7f5f0]">
+                  <th rowSpan={2} className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] align-bottom whitespace-nowrap">Rubro</th>
+                  <th rowSpan={2} className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] align-bottom whitespace-nowrap border-l border-[#ece6d8]">Artículo</th>
+                  {vendedores.map((v) => (
+                    <th key={v} colSpan={3} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8] whitespace-nowrap">{v}</th>
+                  ))}
+                  <th colSpan={1} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">Total</th>
+                </tr>
+                <tr className="bg-[#f7f5f0]">
+                  {vendedores.map((v) => (
+                    <Fragment key={v}>
+                      <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] border-l border-[#ece6d8]">Cant.</th>
+                      <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">Desc. Com.</th>
+                      <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">Venta Neta</th>
+                    </Fragment>
+                  ))}
+                  <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] border-l border-[#ece6d8]">Venta Neta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grupos.length === 0 ? (
+                  <tr><td colSpan={3 + vendedores.length * 3} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
+                ) : grupos.map((g) => (
+                  <Fragment key={g.rubro}>
+                    {g.filas.map((f, i) => (
+                      <tr key={`${g.rubro}::${f.c_articulo}`} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
+                        {i === 0 && (
+                          <td rowSpan={g.filas.length} className="py-1.5 px-3 text-[#1c1811] align-top font-medium whitespace-nowrap">{g.rubro}</td>
+                        )}
+                        <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap border-l border-[#f3efe4]">{f.d_articulo}</td>
+                        {vendedores.map((v) => {
+                          const val = f.porVendedor.get(v);
+                          return (
+                            <Fragment key={v}>
+                              <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{val ? fmtNum(val.cantidad) : "—"}</td>
+                              <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.descuento) : "—"}</td>
+                              <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.ars) : "—"}</td>
+                            </Fragment>
+                          );
+                        })}
+                        <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4] font-medium">{fmtNum(f.totalArs)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
+                      <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap" colSpan={2}>Total {g.rubro}</td>
+                      {vendedores.map((v) => <Fragment key={v}><td className="border-l border-[#ece6d8]" /><td /><td /></Fragment>)}
+                      <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{fmtNum(g.totalRubroArs)}</td>
+                    </tr>
                   </Fragment>
                 ))}
-                <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] border-l border-[#ece6d8]">Venta Neta</th>
-              </tr>
-            </thead>
-            <tbody>
-              {grupos.length === 0 ? (
-                <tr><td colSpan={3 + vendedores.length * 2} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
-              ) : grupos.map((g) => (
-                <Fragment key={g.rubro}>
-                  {g.filas.map((f, i) => (
-                    <tr key={`${g.rubro}::${f.c_articulo}`} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
-                      {i === 0 && (
-                        <td rowSpan={g.filas.length} className="py-1.5 px-3 text-[#1c1811] align-top font-medium whitespace-nowrap">{g.rubro}</td>
-                      )}
-                      <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap border-l border-[#f3efe4]">{f.d_articulo}</td>
-                      {vendedores.map((v) => {
-                        const val = f.porVendedor.get(v);
-                        return (
-                          <Fragment key={v}>
-                            <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{val ? fmtNum(val.cantidad) : "—"}</td>
-                            <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.ars) : "—"}</td>
-                          </Fragment>
-                        );
-                      })}
-                      <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4] font-medium">{fmtNum(f.totalArs)}</td>
-                    </tr>
-                  ))}
-                  <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
-                    <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap" colSpan={2}>Total {g.rubro}</td>
-                    {vendedores.map((v) => <Fragment key={v}><td className="border-l border-[#ece6d8]" /><td /></Fragment>)}
-                    <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{fmtNum(g.totalRubroArs)}</td>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {vendedorAislado && (
+        <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-[#1c1811]">Tendencia por período — {vendedorAislado}</h3>
+            <p className="text-[11px] text-[#847c68] mt-0.5">Drill-down del rango seleccionado, mes a mes.</p>
+          </div>
+          <div className="overflow-x-auto rounded-md border border-[#ece6d8]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#f7f5f0]">
+                  <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Período</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cantidad</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Descuento Comercial</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tendencia.map((t) => (
+                  <tr key={t.periodo} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
+                    <td className="py-1.5 px-3 text-[#1c1811]">{t.periodo}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(t.cantidad)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(t.descuento)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(t.ars)}</td>
                   </tr>
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

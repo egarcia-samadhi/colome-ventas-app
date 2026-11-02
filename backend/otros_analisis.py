@@ -19,8 +19,14 @@
 - Por Cliente rediseñado 2026-11-02 (pedido de Ariel Culasso vía Ezequiel):
   ranking de clientes (ya no agrupado fijo por Vendedor), rango de fechas
   LIBRE en vez de un solo mes, y columna "Descuento Comercial" agregada
-  (ver `ventas_por_cliente` en ig_ventas.py). Por SKU/Por Vendedor siguen
-  con el mismo diseño de un-solo-mes."""
+  (ver `ventas_por_cliente` en ig_ventas.py).
+
+- Por SKU y Por Vendedor, mismo rediseño (2026-11-02, 2 pedidos más de
+  Ariel Culasso el mismo día): las 3 vistas de Otros Análisis pasan a
+  `desde`/`hasta` libre -- `periodo` (YYYY-MM) queda SOLO como el valor
+  default cuando no se manda rango (mes calendario anterior, igual que
+  antes). Ver `ventas_por_sku`/`ventas_por_vendedor` en ig_ventas.py para
+  el detalle de qué cambió en cada una."""
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -83,21 +89,27 @@ async def por_cliente(
 
 @router.get("/por-sku")
 async def por_sku(
-    periodo: str | None = Query(None, description="YYYY-MM, filtra un solo mes calendario"),
+    desde: str | None = Query(None, description="YYYY-MM-DD, default: inicio del mes calendario anterior"),
+    hasta: str | None = Query(None, description="YYYY-MM-DD inclusive, default: fin del mes calendario anterior"),
     user=Depends(require_reader),
 ):
-    periodo = periodo or _periodo_default()
-    desde, hasta_incl = _rango_mes(periodo)
-    rows = ventas_por_sku(desde, hasta_incl)
-    return {"periodo": periodo, "rows": rows}
+    if desde and hasta:
+        desde_d, hasta_d = date.fromisoformat(desde), date.fromisoformat(hasta)
+    else:
+        desde_d, hasta_d = _rango_mes(_periodo_default())
+    rows = ventas_por_sku(desde_d, hasta_d)
+    return {"desde": desde_d.isoformat(), "hasta": hasta_d.isoformat(), "rows": rows}
 
 
 @router.get("/por-vendedor")
 async def por_vendedor(
-    periodo: str | None = Query(None, description="YYYY-MM, filtra un solo mes calendario"),
+    desde: str | None = Query(None, description="YYYY-MM-DD, default: inicio del mes calendario anterior"),
+    hasta: str | None = Query(None, description="YYYY-MM-DD inclusive, default: fin del mes calendario anterior"),
     user=Depends(require_reader),
 ):
-    periodo = periodo or _periodo_default()
-    desde, hasta_incl = _rango_mes(periodo)
-    rows = ventas_por_vendedor(desde, hasta_incl)
-    return {"periodo": periodo, "rows": rows}
+    if desde and hasta:
+        desde_d, hasta_d = date.fromisoformat(desde), date.fromisoformat(hasta)
+    else:
+        desde_d, hasta_d = _rango_mes(_periodo_default())
+    rows = ventas_por_vendedor(desde_d, hasta_d)
+    return {"desde": desde_d.isoformat(), "hasta": hasta_d.isoformat(), "rows": rows}
