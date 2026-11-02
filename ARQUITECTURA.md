@@ -711,6 +711,53 @@ unificar en una sola fuente.
 Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_fdelmotte_paridad_consolidado`.
 
+**ESTA DECISIÓN QUEDÓ REVERTIDA el 2026-11-02** -- ver "FdelMotte:
+estructura real del SNAP" más abajo. La paridad de INFRAESTRUCTURA
+(fábrica `crearSnapInstance`, fetch en vivo, sin pipeline viejo separado)
+sigue vigente; lo que cambió es que la pestaña FdelMotte dejó de MOSTRAR
+la misma jerarquía Sales by Line of Business que Colomé.
+
+## FdelMotte: estructura real del SNAP (2026-11-02, reemplaza la paridad con Consolidado de arriba)
+
+Ezequiel mostró el SNAP real de FdelMotte (de Ariel): 2 tablas
+independientes, cada una con su propio "Grand total" -- nunca la
+jerarquía Domestic/Export/DTC sub-líneas/BOB/Intercompany de Colomé, que
+hasta ahora se reusaba tal cual para esta pestaña (ver sección de arriba).
+
+- **Por variedad**: agrupa directo por `d_articulo` -- mapea 1 a 1 con
+  las 6 variedades reales (FAMILIA DELMOTTE CLASICO/NATURAL/GSM TINTO/
+  ASSEMBLAGE BLANCO/BONARDA/CORBEAU NATURAL), sin clasificación manual.
+  `d_marca` NO sirve (p. ej. "FDM BONARDA" es el mismo valor para Bonarda
+  Y Corbeau Natural).
+- **Por canal**: `DOMESTIC_WHOLESALE`->Grupo Colome Domestic,
+  `DTC_HOSPITALIDAD`->Familia Delmotte Direct (juntos en 1 solo canal,
+  FdelMotte no tiene las sub-líneas propias de Colomé), `EXPORT`->Grupo
+  Colome Export. Mapeo de "Direct" CONFIRMADO con Ezequiel (vía
+  AskUserQuestion) -- su imagen de referencia tenía un "Direct" de
+  $221,6k que no cierra con ningún dato real bajable de Redline en
+  oct-2026 (toda la venta de esa fecha cae en "Domestic"); se reclasificó
+  igual DTC+HOSPITALIDAD como Direct, sin perseguir ese número puntual.
+- **Moneda ARS, no USD** (a diferencia del SNAP de Colomé) -- validado
+  que el total reconcilia exacto contra la imagen de referencia
+  dividiendo `valor_mon_loc` por 1000.
+- **Backend (`snap.py`):** `ventas_fdelmotte(desde, hasta_incl)` ->
+  `{"por_variedad": [...], "por_canal": [...]}`. `GET /api/ventas/snap
+  ?fdelmotte=1` devuelve `fdelmotte_variedad_mes/ytd` +
+  `fdelmotte_canal_mes/ytd` en vez de `sbl_mes/sbl_ytd`.
+- **Frontend (`snap.js`):** `crearSnapInstance` gana flag `esFdelMotte`
+  -- rama de render separada (`renderFdelmotte`, 2 tablas planas sin
+  popup "Sales by Market", que asumía la clasificación SBL de Colomé).
+- **Bug real corregido validando en vivo:** el Grand total LY de "Por
+  canal" no coincidía con el de "Por variedad" (deberían ser el MISMO
+  universo) -- un canal con venta real el año pasado pero CERO en el
+  actual ("Grupo Colome Export") perdía su LY de la suma porque el loop
+  solo recorría los labels del período actual. Fix: recorrer la UNIÓN de
+  labels actual/LY, mismo criterio que "Sin clasificar"/BOB en
+  `ventas_sbl` (nunca esconder plata).
+
+Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_fdelmotte_estructura_real_snap`.
+
 ## Fix: nav Panel/Región/Sales Performance roto (2026-11-02)
 
 El refactor de FdelMotte de arriba (`6d61ebc`, 2026-10-29) convirtió el
