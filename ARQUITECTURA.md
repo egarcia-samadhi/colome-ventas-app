@@ -113,14 +113,14 @@ cambiar en el frontend).
 1. **Bug de UX real corregido**: el criterio de los chips (tildado=
    visible) obligaba a destildar TODOS los demás vendedores a mano para
    ver uno solo (Ariel: "me fue dificultoso seleccionar un vendedor
-   particular... debemos cambiar el criterio"). Fix: `ChipsFiltro` gana un
-   link **"solo"** (`onSoloEste`) que aísla un valor con un click --
-   reusado automáticamente en Por Cliente y Por SKU también (mismo
-   componente compartido).
+   particular... debemos cambiar el criterio"). Primer fix (efímero):
+   `ChipsFiltro` ganó un link "solo" que aislaba un valor con un click --
+   reemplazado el mismo día por la inversión de semántica del punto
+   siguiente, que hace innecesario ese link.
 2. Rango de fechas libre, **vista acumulada** (la tabla principal sigue
    sumando todo el rango sin desglosar por mes).
 3. **Drill-down de tendencia**: cuando queda EXACTAMENTE 1 vendedor
-   visible (vía "solo"), aparece debajo un panel "Tendencia por período"
+   tildado, aparece debajo un panel "Tendencia por período"
    (Cantidad/Descuento/Venta Neta por mes) -- usa el campo `periodo`
    (YYYY-MM) que ahora viaja en cada fila agregada por
    `ventas_por_vendedor()`, calculado client-side del mismo payload sin
@@ -128,6 +128,22 @@ cambiar en el frontend).
 4. **Descuento Comercial** agregado como 3ra sub-columna por vendedor
    (Cantidad/Desc. Comercial/Venta Neta). Margen queda pendiente para una
    iteración futura (Ariel: "dps le agregaremos el margen").
+
+### `ChipsFiltro`: semántica invertida (2026-11-02, mismo día, pedido de Ezequiel)
+
+Ezequiel, al ver el filtro de Vendedor de Por Cliente recién entregado:
+*"deberia venir todo destildado (para mostrar todo). si se filtra 1, 2 o
+3, muestre solo de esos vendedores. asi en las 3 pestañas"*. Antes:
+tildado=visible, TODO tildado por default (criterio que había motivado el
+link "solo" del punto 1 de arriba). Ahora: `seleccionados` (antes
+`ocultos`) vacío = sin filtro, se muestra TODO; 1+ valores tildados = se
+muestra SOLO esos -- ningún chip arranca tildado. El link "solo" queda
+redundante (tildar 1 solo valor ya hace lo mismo) y se saca, reemplazado
+por "Limpiar" (visible solo con algo tildado). Aplicado a los 3 filtros de
+chips de la pantalla (Por Cliente Vendedor/Canal, Por SKU Marca/Mercado,
+Por Vendedor Vendedores). **Institucionalizado en
+`00-Normas-de-Trabajo.md`** (regla nueva, aplica a cualquier filtro de
+chips de cualquier proyecto, no solo Colomé-Ventas).
 
 Las 3 verificadas en vivo (Claude-en-Chrome). Detalle completo en memoria
 de Claude, `proyecto_colome_ventas_rediseno_por_cliente_ariel`.
