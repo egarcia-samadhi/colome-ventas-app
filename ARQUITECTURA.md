@@ -145,6 +145,12 @@ Por Vendedor Vendedores). **Institucionalizado en
 `00-Normas-de-Trabajo.md`** (regla nueva, aplica a cualquier filtro de
 chips de cualquier proyecto, no solo Colomé-Ventas).
 
+### Encabezados ordenables por click (2026-11-02, mismo día, pedido de Ezequiel)
+
+*"sabes que le falta a las 3 pestañas? que se pueda ordenar al hacer clic en el encabezado"*. `SortTh`/`ordenar()` genéricos (helpers al tope de `otros-analisis/page.tsx`) -- 1er click en una columna ordena desc, 2do click invierte a asc, click en otra columna reinicia en desc, indicador ▲/▼ en la columna activa.
+- Por Cliente/Por SKU (rankings planos): todas las columnas numéricas + la de nombre son ordenables, sin restricción.
+- Por Vendedor (tabla PIVOT, caso distinto): Rubro ordena los GRUPOS; Artículo/Total Venta Neta ordenan las filas DENTRO de cada grupo -- las columnas por-vendedor (una por cada vendedor tildado) NO son ordenables, ambiguo con varios vendedores a la vez.
+
 Las 3 verificadas en vivo (Claude-en-Chrome). Detalle completo en memoria
 de Claude, `proyecto_colome_ventas_rediseno_por_cliente_ariel`.
 - **Gotcha de cache (recurrente, atención si se agrega un campo nuevo a
