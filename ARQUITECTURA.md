@@ -174,6 +174,18 @@ de Claude, `proyecto_colome_ventas_rediseno_por_cliente_ariel`.
 ### Outage de producción, mismo día (causa raíz NO relacionada con el código de la UI)
 
 Durante la verificación en vivo del punto anterior, el tablero completo quedó inaccesible para todos los usuarios por varios minutos ("no carga el tablero directamente", "no anda el tablero"). Causa raíz: `ig_ventas.py::_fetch_dia_remoto` hace fetch SÍNCRONO (`urllib.request`) a la API externa de Redline dentro de un endpoint `async def` de FastAPI con un solo worker uvicorn -- mientras un request recorre un rango de fechas sin cachear (hasta ~30 días, con reintentos síncronos), bloquea el ÚNICO event loop del proceso para TODOS los requests, de cualquier usuario, de cualquier pantalla (confirmado en logs de Traefik: requests de 180s a 430s en `/`, `/otros-analisis/`, `/api/otros-analisis/por-vendedor`). Mitigado reiniciando el servicio (`docker service update --force colome_colome-ventas`) -- **el riesgo de fondo sigue vigente**, cualquier usuario real que pida un rango sin cachear puede repetirlo. Fix arquitectural pendiente (migrar el fetch a async/`run_in_executor`), no implementado todavía. Detalle completo en memoria de Claude, `proyecto_colome_ventas_outage_blocking_io_otros_analisis`.
+
+### Composición "por factura" en ventana flotante (2026-11-02, mismo día, pedido de Ezequiel)
+
+*"por cliente, por sku y por vendedor, podremos mostrar la composicion en una ventana flotante?"* → *"por factura"*. Click en una fila/celda abre un popup con las facturas REALES que componen ese total -- mismo patrón que el popup "Sales by Market" de Sales Performance, acá a nivel factura.
+
+- **Backend:** `ig_ventas.py::detalle_por_factura(desde, hasta_incl, cliente?, c_articulo?, vendedor?)` -- agrega por (comprobante, número, fecha), UNA fila por factura aunque tenga más de una línea dentro del filtro (los artículos se juntan en una celda, separados por coma). Endpoint `/api/otros-analisis/detalle-facturas`, filtros combinables.
+- **Frontend:** `ComposicionModal` compartido por las 3 vistas -- overlay + tabla Fecha/Comprobante/(lo que no esté ya fijado por el filtro: Cliente, Vendedor o Artículo(s))/Cajas9l/Venta Neta/Descuento Comercial + total.
+  - Por Cliente: click en el cliente → filtra por `cliente`.
+  - Por SKU: click en el artículo → filtra por `c_articulo`.
+  - Por Vendedor: click en la celda "Venta Neta" de cada vendedor×artículo → filtra por `c_articulo`+`vendedor` (el más granular de los 3).
+
+Verificado en vivo y contra el backend directo (`docker exec`): click en un cliente top ($145.152.954) abrió el popup con exactamente 1 factura de exportación de 12 artículos, suma exacta. Detalle completo en memoria de Claude, `proyecto_colome_ventas_composicion_por_factura`.
 - **Gotcha de cache (recurrente, atención si se agrega un campo nuevo a
   `CAMPOS_USADOS`):** el cache por-día en disco (`/data/ig_ventas_cache`,
   persistente para siempre en meses cerrados) solo tiene las claves que
