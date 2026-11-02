@@ -329,6 +329,33 @@ def _filas_universo(desde: date, hasta_incl: date, fdelmotte: bool):
 # solo real desde `DESDE_HISTORICO` (2025-09-01), no hay fixture LFY para
 # FdelMotte (esa fixture es un volcado puntual que Ariel mandó solo para
 # la marca Colomé).
+# Líneas FIJAS, pedido explícito de Ezequiel 2026-11-02 ("esta son las
+# lineas que se tienen que ver... no otras... esto es solo para la
+# pestaña del snap de familia del monte"): ni una fila más que estas 6 +
+# Grand total / 3 + Grand total, pase lo que pase con los datos crudos --
+# a diferencia del resto del SNAP (donde una categoría sin mapear cae en
+# "Sin clasificar", SIEMPRE visible, para nunca esconder plata), acá
+# Ezequiel pidió lo opuesto explícitamente para esta pestaña puntual: la
+# lista es CERRADA. El Grand total suma SOLO estas filas (no el total
+# real de todo lo de FdelMotte) para que el total mostrado siempre
+# cuadre exacto con lo que se ve arriba -- investigado 2026-11-02: hoy
+# no existe ninguna fila de FdelMotte fuera de estas 3 categorías de
+# canal (confirmado contra octubre-2026, ver `_fdelmotte_canal`), así
+# que en la práctica no hay plata que se pierda.
+FDELMOTTE_VARIEDADES_ORDEN = [
+    "FAMILIA DELMOTTE CLASICO",
+    "FAMILIA DELMOTTE NATURAL",
+    "FAMILIA DELMOTTE GSM TINTO",
+    "FAMILIA DELMOTTE ASSEMBLAGE BLANCO",
+    "FAMILIA DELMOTTE BONARDA",
+    "FAMILIA DELMOTTE CORBEAU NATURAL",
+]
+FDELMOTTE_CANALES_ORDEN = [
+    "Grupo Colome Domestic",
+    "Familia Delmotte Direct",
+    "Grupo Colome Export",
+]
+
 FDELMOTTE_CANAL_MAP: list[tuple[set, str]] = [
     (DOMESTIC_WHOLESALE, "Grupo Colome Domestic"),
     (DTC_HOSPITALIDAD, "Familia Delmotte Direct"),
@@ -365,18 +392,18 @@ def _filas_fdelmotte_tabla(desde: date, hasta_incl: date, por: str) -> list[dict
     hasta_ly = date(hasta_incl.year - 1, hasta_incl.month, hasta_incl.day)
     ly = _agregado_fdelmotte(desde_ly, hasta_ly, por=por) if desde_ly >= DESDE_HISTORICO else None
 
-    # BUG REAL corregido 2026-11-02 (encontrado validando en vivo, Grand
-    # total LY de "Por canal" daba $7.156k vs $7.944k de "Por variedad" --
-    # debería ser el MISMO número, mismo universo): recorrer solo
-    # `agg.items()` (labels del período ACTUAL) pierde un label que tuvo
-    # venta real el año pasado pero cero en el actual (ej. "Grupo Colome
-    # Export" de FdelMotte, sin exportaciones en oct-2026 pero con
-    # USD 787k en oct-2025) -- ese LY quedaba fuera de la suma del total,
-    # aunque la fila ni se mostraba. Recorrer la UNIÓN de labels de
-    # `agg`/`ly` para que ningún total se quede corto por un label que
-    # solo existe de un lado -- mismo criterio que "Sin clasificar"/BOB en
-    # `ventas_sbl`, nunca esconder plata.
-    labels = set(agg.keys()) | (set(ly.keys()) if ly is not None else set())
+    # Lista FIJA (ver FDELMOTTE_VARIEDADES_ORDEN/FDELMOTTE_CANALES_ORDEN
+    # arriba, pedido explícito de Ezequiel: "no otras") -- nunca las
+    # labels que traigan los datos crudos. Mismo criterio resuelve el BUG
+    # REAL encontrado validando en vivo el mismo día (Grand total LY de
+    # "Por canal" daba $7.156k vs $7.944k de "Por variedad", debería ser
+    # el MISMO número): antes el loop recorría solo los labels del
+    # período ACTUAL, perdiendo el LY de un canal con venta el año
+    # pasado pero cero en el actual (ej. "Grupo Colome Export", sin
+    # exportaciones en oct-2026 pero con ARS 787k en oct-2025) -- al
+    # recorrer la lista fija completa (que YA incluye Export) en vez de
+    # `agg.keys()`, ese caso queda cubierto de taquito.
+    labels = FDELMOTTE_VARIEDADES_ORDEN if por == "variedad" else FDELMOTTE_CANALES_ORDEN
     out = []
     for label in labels:
         ars, cajas = agg.get(label, [0.0, 0.0])
@@ -393,7 +420,6 @@ def _filas_fdelmotte_tabla(desde: date, hasta_incl: date, por: str) -> list[dict
             row["ars_vs_ly"] = "N/A"
             row["cajas_vs_ly"] = "N/A"
         out.append(row)
-    out.sort(key=lambda r: -r["ars"])
 
     total_ars = sum(r["ars"] for r in out)
     total_cajas = sum(r["cajas"] for r in out)
