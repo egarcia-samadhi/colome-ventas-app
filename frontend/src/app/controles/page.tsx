@@ -73,6 +73,9 @@ function CorregirJurisdiccionModal({ valorApi, onClose, onSaved }: { valorApi: s
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white rounded-md p-5 w-[420px]" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-sm font-semibold text-[#1c1811] mb-3">Clasificar &quot;{valorApi}&quot;</h3>
+        <p className="text-[11px] text-[#847c68] mb-2">
+          Significa que &quot;{valorApi}&quot; es un valor de provincia/país que vino en una factura y todavía no está mapeado a una jurisdicción conocida. Elegí si es una provincia argentina o una venta al exterior.
+        </p>
         <label className="block text-[11px] text-[#847c68] mb-1">Tipo</label>
         <select
           value={tipo}
@@ -110,8 +113,29 @@ function CorregirJurisdiccionModal({ valorApi, onClose, onSaved }: { valorApi: s
 
 function CorregirCanalAgrupanteModal({ canalVenta, onClose, onSaved }: { canalVenta: string; onClose: () => void; onSaved: () => void }) {
   const [agrupante, setAgrupante] = useState("");
+  const [otro, setOtro] = useState(false);
+  const [opciones, setOpciones] = useState<string[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Lista de agrupantes YA en uso (pedido explícito de Ezequiel
+  // 2026-11-02: "no le queda claro a la gente como corregirlo" -- antes
+  // esto era un <input> de texto libre, sin ninguna pista de qué nombre
+  // de agrupante ya existe. Quien corrige no tiene por qué saber que
+  // "Vinotecas" ya es un agrupante real y no inventar "vinotecas" en
+  // minúscula o "Vinoteca" sin la S -- un typo así no se une al
+  // agrupante real, crea uno nuevo invisible). "Otro" como vía de
+  // escape si hace falta un agrupante genuinamente nuevo.
+  useEffect(() => {
+    fetch("/api/datos-maestros/canal-agrupante")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        const unicos = [...new Set((d.rows as { agrupante: string }[]).map((r) => r.agrupante))].sort((a, b) => a.localeCompare(b, "es"));
+        setOpciones(unicos);
+      })
+      .catch(() => {});
+  }, []);
 
   const guardar = async () => {
     setGuardando(true);
@@ -132,13 +156,37 @@ function CorregirCanalAgrupanteModal({ canalVenta, onClose, onSaved }: { canalVe
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white rounded-md p-5 w-[420px]" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-sm font-semibold text-[#1c1811] mb-3">Asignar agrupante a &quot;{canalVenta}&quot;</h3>
+        <p className="text-[11px] text-[#847c68] mb-2">
+          Significa que &quot;{canalVenta}&quot; es un Canal de Venta nuevo que todavía no está agrupado en ningún "Agrupante" (filtro previo de Panel de Ventas). Elegí a cuál de los grupos existentes pertenece.
+        </p>
         <label className="block text-[11px] text-[#847c68] mb-1">Agrupante</label>
-        <input
-          value={agrupante}
-          onChange={(e) => setAgrupante(e.target.value)}
-          placeholder="ej. Vinotecas"
-          className="w-full border border-[#ece6d8] rounded px-2 py-1.5 text-sm mb-3"
-        />
+        {!otro ? (
+          <select
+            value={agrupante}
+            onChange={(e) => {
+              if (e.target.value === "__otro__") { setOtro(true); setAgrupante(""); return; }
+              setAgrupante(e.target.value);
+            }}
+            className="w-full border border-[#ece6d8] rounded px-2 py-1.5 text-sm mb-3"
+          >
+            <option value="">Elegir…</option>
+            {opciones.map((o) => <option key={o} value={o}>{o}</option>)}
+            <option value="__otro__">Otro (ninguno de estos)…</option>
+          </select>
+        ) : (
+          <div className="mb-3">
+            <input
+              value={agrupante}
+              onChange={(e) => setAgrupante(e.target.value)}
+              placeholder="Nombre del agrupante nuevo"
+              autoFocus
+              className="w-full border border-[#ece6d8] rounded px-2 py-1.5 text-sm"
+            />
+            <button onClick={() => { setOtro(false); setAgrupante(""); }} className="text-[10px] text-[#847c68] hover:text-[#5a5342] underline mt-1">
+              ← Volver a elegir uno existente
+            </button>
+          </div>
+        )}
         {error && <p className="text-[11px] text-[#c9772c] mb-2">{error}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="text-[11px] text-[#847c68] hover:text-[#5a5342] px-3 py-1.5">Cancelar</button>
@@ -223,6 +271,29 @@ export default function ControlesPage() {
                       <p className="text-[11px] text-[#847c68] mb-3">{c.descripcion}</p>
                     )}
 
+                    {/* Explicación en lenguaje simple de qué significa cada
+                        control y qué hay que hacer -- pedido explícito de
+                        Ezequiel 2026-11-02: "no le queda claro a la gente
+                        como corregirlo o que es lo que esta faltando...
+                        deberian ser un poco mas claros". La "descripción"
+                        técnica de arriba queda, esto es un resumen aparte
+                        en criollo. */}
+                    {!c.ok && c.id === "jurisdiccion_sin_clasificar" && (
+                      <p className="text-[11px] text-[#5a5342] bg-[#f7f5f0] rounded px-3 py-2 mb-3">
+                        👉 Hay ventas con una provincia o país que el sistema no reconoce todavía. Hacé click en &quot;Corregir&quot; en cada fila y decile si es una provincia argentina o una venta al exterior.
+                      </p>
+                    )}
+                    {!c.ok && c.id === "sbl_sin_clasificar" && (
+                      <p className="text-[11px] text-[#5a5342] bg-[#f7f5f0] rounded px-3 py-2 mb-3">
+                        👉 Hay ventas de Venta al Personal/E-commerce/Hotel/Visitor Center que el sistema no sabe a qué línea del Sales Performance asignar. Hacé click en &quot;Corregir&quot; y elegí la línea correcta de la lista (Employees, E-commerce, Colome Hotel, Colome Visitor Center o Cafayate Visitor Center).
+                      </p>
+                    )}
+                    {!c.ok && c.id === "canal_sin_agrupante" && (
+                      <p className="text-[11px] text-[#5a5342] bg-[#f7f5f0] rounded px-3 py-2 mb-3">
+                        👉 Hay un Canal de Venta nuevo que no está agrupado todavía (el filtro previo de Panel de Ventas / Ventas por Región). Hacé click en &quot;Corregir&quot; y elegí a qué agrupante existente pertenece.
+                      </p>
+                    )}
+
                     {c.id === "cruce_afip" && !c.ok && (
                       <a
                         href="/ctrl-afip/?tab=info"
@@ -244,8 +315,16 @@ export default function ControlesPage() {
                         <tbody>
                           {c.items.map((it) => (
                             <tr key={it.valor} className="border-t border-[#f3efe4]">
-                              <td className="py-1.5 text-[#1c1811]">{it.valor}</td>
-                              <td className="py-1.5 text-right text-[#847c68]">{it.filas}</td>
+                              <td className="py-1.5 text-[#1c1811]">
+                                {c.id === "sbl_sin_clasificar" ? (
+                                  <div className="space-y-0.5">
+                                    <div><span className="text-[#847c68]">Centro de Costo:</span> {it.centro_costo || <span className="text-[#a39a84]">(vacío)</span>}</div>
+                                    <div><span className="text-[#847c68]">Categoría:</span> {it.categoria || <span className="text-[#a39a84]">(vacío)</span>}</div>
+                                    <div><span className="text-[#847c68]">Canal de Venta:</span> {it.canal_venta || <span className="text-[#a39a84]">(vacío)</span>}</div>
+                                  </div>
+                                ) : it.valor}
+                              </td>
+                              <td className="py-1.5 text-right text-[#847c68] align-top">{it.filas}</td>
                               {c.id === "jurisdiccion_sin_clasificar" && (
                                 <td className="py-1.5 text-right">
                                   <button
@@ -257,7 +336,7 @@ export default function ControlesPage() {
                                 </td>
                               )}
                               {c.id === "sbl_sin_clasificar" && (
-                                <td className="py-1.5 text-right">
+                                <td className="py-1.5 text-right align-top">
                                   <a
                                     href={`/datos-maestros/?tab=snap&cc=${encodeURIComponent(it.centro_costo || "")}&cat=${encodeURIComponent(it.categoria || "")}&cv=${encodeURIComponent(it.canal_venta || "")}`}
                                     className="text-[11px] text-[#7D4E5B] hover:text-[#9F6375] underline"

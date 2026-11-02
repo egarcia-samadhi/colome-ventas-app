@@ -238,6 +238,18 @@ function JurisdiccionMapa() {
 interface FilaSnapMapa { id: number; centro_costo: string | null; categoria: string | null; canal_venta: string | null; linea_negocio: string }
 interface ComboSinClasificar { centro_costo: string; categoria: string; canal_venta: string; filas: number }
 
+// Líneas de negocio válidas para el campo "Línea de negocio" -- pedido
+// explícito de Ezequiel 2026-11-02 ("no le queda claro a la gente como
+// corregirlo... deberian ser un poco mas claros"): antes era un
+// `<input>` de texto libre sin ninguna pista de qué escribir, así que
+// quien corrige un control no sabe qué valores existen -- mismo
+// conjunto cerrado que `DTC_LINEAS_FIJAS` en snap.py (backend), las
+// únicas líneas que puede resolver una combinación de DTC/HOSPITALIDAD
+// (Domestic/Export se deciden por `d_categoria` directo, no pasan por
+// esta tabla). Si se agrega una línea nueva a futuro, agregarla acá Y en
+// `DTC_LINEAS_FIJAS` de snap.py.
+const LINEAS_NEGOCIO_VALIDAS = ["Employees", "E-commerce", "Colome Hotel", "Colome Visitor Center", "Cafayate Visitor Center"];
+
 function SnapLineaNegocioMapa() {
   const [rows, setRows] = useState<FilaSnapMapa[]>([]);
   const [sinClasificar, setSinClasificar] = useState<{ desde: string; hasta: string; combos: ComboSinClasificar[] } | null>(null);
@@ -369,7 +381,10 @@ function SnapLineaNegocioMapa() {
           </div>
           <div>
             <label className="block text-[11px] text-[#847c68] mb-1">Línea de negocio</label>
-            <input value={alta.linea_negocio} onChange={(e) => setAlta((s) => ({ ...s, linea_negocio: e.target.value }))} placeholder="ej. Colome Hotel" className="px-2 py-1.5 rounded-md border border-[#ece6d8] text-sm w-44" />
+            <select value={alta.linea_negocio} onChange={(e) => setAlta((s) => ({ ...s, linea_negocio: e.target.value }))} className="px-2 py-1.5 rounded-md border border-[#ece6d8] text-sm w-44">
+              <option value="">Elegir…</option>
+              {LINEAS_NEGOCIO_VALIDAS.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
           </div>
           <button onClick={agregar} className="px-3 py-1.5 rounded-full text-sm font-medium bg-[#7D4E5B] text-white hover:bg-[#9F6375] transition">Agregar</button>
           {errorAlta && <p className="text-red-600 text-xs w-full">{errorAlta}</p>}
@@ -409,7 +424,11 @@ function SnapLineaNegocioMapa() {
                         {isEditing ? <input value={form.canal_venta} onChange={(e) => setForm((s) => ({ ...s, canal_venta: e.target.value }))} className="px-1.5 py-1 rounded border border-[#d9b38c] text-sm w-32" /> : (r.canal_venta || <span className="text-[#a39a84]">—</span>)}
                       </td>
                       <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap font-medium">
-                        {isEditing ? <input value={form.linea_negocio} onChange={(e) => setForm((s) => ({ ...s, linea_negocio: e.target.value }))} className="px-1.5 py-1 rounded border border-[#d9b38c] text-sm w-40" /> : r.linea_negocio}
+                        {isEditing ? (
+                          <select value={form.linea_negocio} onChange={(e) => setForm((s) => ({ ...s, linea_negocio: e.target.value }))} className="px-1.5 py-1 rounded border border-[#d9b38c] text-sm w-40">
+                            {LINEAS_NEGOCIO_VALIDAS.map((l) => <option key={l} value={l}>{l}</option>)}
+                          </select>
+                        ) : r.linea_negocio}
                       </td>
                       {puedeEditar && (
                         <td className="py-1.5 px-3 text-center whitespace-nowrap">
