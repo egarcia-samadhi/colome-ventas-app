@@ -365,8 +365,21 @@ def _filas_fdelmotte_tabla(desde: date, hasta_incl: date, por: str) -> list[dict
     hasta_ly = date(hasta_incl.year - 1, hasta_incl.month, hasta_incl.day)
     ly = _agregado_fdelmotte(desde_ly, hasta_ly, por=por) if desde_ly >= DESDE_HISTORICO else None
 
+    # BUG REAL corregido 2026-11-02 (encontrado validando en vivo, Grand
+    # total LY de "Por canal" daba $7.156k vs $7.944k de "Por variedad" --
+    # debería ser el MISMO número, mismo universo): recorrer solo
+    # `agg.items()` (labels del período ACTUAL) pierde un label que tuvo
+    # venta real el año pasado pero cero en el actual (ej. "Grupo Colome
+    # Export" de FdelMotte, sin exportaciones en oct-2026 pero con
+    # USD 787k en oct-2025) -- ese LY quedaba fuera de la suma del total,
+    # aunque la fila ni se mostraba. Recorrer la UNIÓN de labels de
+    # `agg`/`ly` para que ningún total se quede corto por un label que
+    # solo existe de un lado -- mismo criterio que "Sin clasificar"/BOB en
+    # `ventas_sbl`, nunca esconder plata.
+    labels = set(agg.keys()) | (set(ly.keys()) if ly is not None else set())
     out = []
-    for label, (ars, cajas) in agg.items():
+    for label in labels:
+        ars, cajas = agg.get(label, [0.0, 0.0])
         row = {"label": label, "ars": round(ars / 1000, 4), "cajas": round(cajas, 4)}
         if ly is not None:
             ars_ly, cajas_ly = ly.get(label, [0.0, 0.0])
