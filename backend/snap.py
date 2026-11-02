@@ -292,6 +292,126 @@ def _filas_universo(desde: date, hasta_incl: date, fdelmotte: bool):
         yield it
 
 
+# SNAP real de FdelMotte: ESTRUCTURA DISTINTA a Sales by Line of Business
+# de Colomé (2026-11-02, pedido explícito de Ezequiel -- mostró el SNAP
+# real de Ariel: 2 tablas independientes, cada una con su propio "Grand
+# total", NUNCA unificadas en la jerarquía Domestic/Export/DTC/BOB/
+# Intercompany que usa Colomé -- ver `ventas_sbl` arriba, que hasta ahora
+# se reusaba tal cual para FdelMotte vía `fdelmotte=True` desde el
+# 2026-10-22. Esa decisión quedó revertida PARA FDELMOTTE SOLAMENTE; el
+# SNAP de Colomé (fdelmotte=False) no cambia.
+#
+# Tabla 1 -- por VARIEDAD de producto: agrupa directo por `d_articulo`
+# (6 valores reales confirmados contra octubre-2026: FAMILIA DELMOTTE
+# CLASICO/NATURAL/GSM TINTO/ASSEMBLAGE BLANCO/BONARDA/CORBEAU NATURAL --
+# mapean 1 a 1 con "Flia Del Motte - Malbec Clásico/Natural/Assemblage
+# GSM/Assemblage Blanco/Bonarda/Corbeau Natural" de la imagen de
+# referencia de Ezequiel, sin necesidad de un mapeo manual en Datos
+# Maestros). `d_marca` NO sirve para esto -- "FDM BONARDA" es el mismo
+# valor tanto para Bonarda como para Corbeau Natural, se pierde la
+# distinción.
+#
+# Tabla 2 -- por CANAL: mismos 3 grupos que usa Colomé para Domestic/
+# Export (`DOMESTIC_WHOLESALE`/`EXPORT`, definidos arriba), pero DTC+
+# HOSPITALIDAD se juntan en un solo "Familia Delmotte Direct" (FdelMotte
+# no tiene las sub-líneas propias de Colomé -- Employees/E-commerce/
+# Hotel/Visitor Center -- esos centros de costo no existen para esta
+# marca). Mapeo CONFIRMADO con Ezequiel el mismo día: la imagen de
+# referencia que mostró tenía un "Familia Delmotte Direct" de $221,6k que
+# NO cierra con ningún dato real bajable de Redline en octubre-2026 (la
+# suma de TODO lo de FdelMotte esa fecha, cualquier categoría, da
+# exacto el "Grupo Colome Domestic" de esa imagen, $9.600,5k, sin nada
+# más) -- Ezequiel decidió igual reclasificar DTC+HOSPITALIDAD como
+# "Direct" de acá en más, sin perseguir el número exacto de esa imagen
+# puntual (podía ser de otro período, u otra fuente).
+#
+# Last Year: mismo criterio que ya usa `ventas_sbl(fdelmotte=True)` --
+# solo real desde `DESDE_HISTORICO` (2025-09-01), no hay fixture LFY para
+# FdelMotte (esa fixture es un volcado puntual que Ariel mandó solo para
+# la marca Colomé).
+FDELMOTTE_CANAL_MAP: list[tuple[set, str]] = [
+    (DOMESTIC_WHOLESALE, "Grupo Colome Domestic"),
+    (DTC_HOSPITALIDAD, "Familia Delmotte Direct"),
+    (EXPORT, "Grupo Colome Export"),
+]
+
+
+def _fdelmotte_canal(it: dict) -> str:
+    categoria = it.get("d_categoria") or ""
+    for categorias, label in FDELMOTTE_CANAL_MAP:
+        if categoria in categorias:
+            return label
+    return "Sin clasificar"
+
+
+def _agregado_fdelmotte(desde: date, hasta_incl: date, *, por: str) -> dict[str, list[float]]:
+    """{label: [ars, cajas]} -- `por='variedad'` agrupa por `d_articulo`,
+    `por='canal'` agrupa vía `_fdelmotte_canal`. ARS (no USD) porque el
+    total reconcilia exacto contra la imagen de referencia de Ezequiel
+    dividiendo `valor_mon_loc` por 1000 -- el SNAP de FdelMotte reporta en
+    moneda local, a diferencia del de Colomé (USD)."""
+    acc: dict[str, list[float]] = {}
+    for it in _filas_universo(desde, hasta_incl, fdelmotte=True):
+        label = (it.get("d_articulo") or "Sin artículo") if por == "variedad" else _fdelmotte_canal(it)
+        a = acc.setdefault(label, [0.0, 0.0])
+        a[0] += float(it.get("valor_mon_loc") or 0)
+        a[1] += float(it.get("cantidad_cajas9l") or 0)
+    return acc
+
+
+def _filas_fdelmotte_tabla(desde: date, hasta_incl: date, por: str) -> list[dict]:
+    agg = _agregado_fdelmotte(desde, hasta_incl, por=por)
+    desde_ly = date(desde.year - 1, desde.month, desde.day)
+    hasta_ly = date(hasta_incl.year - 1, hasta_incl.month, hasta_incl.day)
+    ly = _agregado_fdelmotte(desde_ly, hasta_ly, por=por) if desde_ly >= DESDE_HISTORICO else None
+
+    out = []
+    for label, (ars, cajas) in agg.items():
+        row = {"label": label, "ars": round(ars / 1000, 4), "cajas": round(cajas, 4)}
+        if ly is not None:
+            ars_ly, cajas_ly = ly.get(label, [0.0, 0.0])
+            row["ars_ly"] = round(ars_ly / 1000, 4)
+            row["cajas_ly"] = round(cajas_ly, 4)
+            row["ars_vs_ly"] = (ars - ars_ly) / ars_ly if ars_ly else ("N/A" if ars == 0 else 1.0)
+            row["cajas_vs_ly"] = (cajas - cajas_ly) / cajas_ly if cajas_ly else ("N/A" if cajas == 0 else 1.0)
+        else:
+            row["ars_ly"] = None
+            row["cajas_ly"] = None
+            row["ars_vs_ly"] = "N/A"
+            row["cajas_vs_ly"] = "N/A"
+        out.append(row)
+    out.sort(key=lambda r: -r["ars"])
+
+    total_ars = sum(r["ars"] for r in out)
+    total_cajas = sum(r["cajas"] for r in out)
+    total: dict = {"label": "Grand total", "ars": round(total_ars, 4), "cajas": round(total_cajas, 4)}
+    if ly is not None:
+        total_ars_ly = sum((r["ars_ly"] or 0) for r in out)
+        total_cajas_ly = sum((r["cajas_ly"] or 0) for r in out)
+        total["ars_ly"] = round(total_ars_ly, 4)
+        total["cajas_ly"] = round(total_cajas_ly, 4)
+        total["ars_vs_ly"] = (total_ars - total_ars_ly) / total_ars_ly if total_ars_ly else ("N/A" if total_ars == 0 else 1.0)
+        total["cajas_vs_ly"] = (total_cajas - total_cajas_ly) / total_cajas_ly if total_cajas_ly else ("N/A" if total_cajas == 0 else 1.0)
+    else:
+        total["ars_ly"] = None
+        total["cajas_ly"] = None
+        total["ars_vs_ly"] = "N/A"
+        total["cajas_vs_ly"] = "N/A"
+    out.append(total)
+    return out
+
+
+def ventas_fdelmotte(desde: date, hasta_incl: date) -> dict:
+    """SNAP real de FdelMotte: {"por_variedad": [...], "por_canal": [...]}
+    -- 2 tablas independientes, cada una con su propia fila "Grand total"
+    (ver comentario arriba de `FDELMOTTE_CANAL_MAP` para el detalle
+    completo de la estructura y las decisiones de clasificación)."""
+    return {
+        "por_variedad": _filas_fdelmotte_tabla(desde, hasta_incl, "variedad"),
+        "por_canal": _filas_fdelmotte_tabla(desde, hasta_incl, "canal"),
+    }
+
+
 def desglose_mercado(label: str, desde: date, hasta_incl: date, fdelmotte: bool = False) -> list[dict]:
     """Desglose por mercado (provincia Argentina / Exterior, mismo catálogo
     ya validado que usa Ventas por Jurisdicción -- jurisdiccion_mapa en
@@ -746,9 +866,11 @@ async def snap(mes: str | None = None, fdelmotte: bool = False, user=Depends(req
     explícito de Ezequiel 2026-10-19 -- antes el mes cerrado era fijo, sin
     forma de elegir otro.
 
-    `fdelmotte=True` (2026-10-22, pedido "llevá FdelMotte al mismo formato
-    que Consolidado"): mismo SNAP pero con el universo de filas de
-    FdelMotte en vez de excluirlas -- ver `ventas_sbl`/`_agregado_sbl`.
+    `fdelmotte=True`: SNAP real de FdelMotte, ESTRUCTURA DISTINTA desde
+    2026-11-02 (ver `ventas_fdelmotte` -- 2 tablas por variedad/canal, ya
+    no la jerarquía de Sales by Line of Business de Colomé que se
+    reusaba desde el 2026-10-22). Devuelve `fdelmotte_variedad_mes`/
+    `_ytd` y `fdelmotte_canal_mes`/`_ytd` en vez de `sbl_mes`/`sbl_ytd`.
     `ly_mensual` se omite acá (solo lo consume la tabla comparativa de
     Panel de Ventas, que es exclusiva de Colomé, no de esta pestaña) para
     no calcular un SNAP completo de 12+ meses de más en cada request."""
@@ -761,12 +883,22 @@ async def snap(mes: str | None = None, fdelmotte: bool = False, user=Depends(req
     desde_ytd = inicio_ejercicio_fiscal(hasta_mes)
     if desde_ytd > desde_mes:
         desde_ytd = desde_mes
-    return {
+    base = {
         "periodo": hasta_mes.strftime("%Y-%m"),
         "desde_ytd": desde_ytd.isoformat(),
         "hasta_ytd": hasta_mes.isoformat(),
         "meses_disponibles": disponibles,
-        "sbl_mes": ventas_sbl(desde_mes, hasta_mes, fdelmotte=fdelmotte),
-        "sbl_ytd": ventas_sbl(desde_ytd, hasta_mes, fdelmotte=fdelmotte),
-        "ly_mensual": _ly_mensual() if not fdelmotte else [],
     }
+    if fdelmotte:
+        fd_mes = ventas_fdelmotte(desde_mes, hasta_mes)
+        fd_ytd = ventas_fdelmotte(desde_ytd, hasta_mes)
+        base["fdelmotte_variedad_mes"] = fd_mes["por_variedad"]
+        base["fdelmotte_variedad_ytd"] = fd_ytd["por_variedad"]
+        base["fdelmotte_canal_mes"] = fd_mes["por_canal"]
+        base["fdelmotte_canal_ytd"] = fd_ytd["por_canal"]
+        base["ly_mensual"] = []
+    else:
+        base["sbl_mes"] = ventas_sbl(desde_mes, hasta_mes)
+        base["sbl_ytd"] = ventas_sbl(desde_ytd, hasta_mes)
+        base["ly_mensual"] = _ly_mensual()
+    return base

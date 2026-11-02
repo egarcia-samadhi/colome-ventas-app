@@ -76,6 +76,54 @@ function renderSbl(rows) {
   return html;
 }
 
+// ---------- FdelMotte: SNAP real, ESTRUCTURA DISTINTA (2026-11-02,
+// pedido explícito de Ezequiel -- mostró el SNAP real de Ariel: 2 tablas
+// independientes "Por variedad"/"Por canal", cada una con su propio
+// "Grand total", nunca la jerarquía Domestic/Export/DTC/BOB/Intercompany
+// de Sales by Line of Business que se reusaba para esta pestaña desde el
+// 2026-10-22). Sin popup "Sales by Market" (esa lógica asume la
+// clasificación de línea de negocio de Colomé, que ya no aplica acá) --
+// filas de texto plano, no links. Moneda ARS, no USD (ver docstring de
+// `_agregado_fdelmotte` en snap.py -- el total reconcilia exacto en ARS,
+// no en USD). ----------
+function renderFdelmotteTabla(titulo, rows) {
+  let html = `<h4 style="margin:0 0 8px;font-size:13px;font-weight:600;color:var(--ink)">${titulo}</h4><table><thead>
+    <tr class="grp">
+      <th></th>
+      <th class="grp" colspan="3">Sales Value (ARS 000s)</th>
+      <th></th>
+      <th class="grp" colspan="3">9 Litre Equivalent</th>
+    </tr>
+    <tr>
+      <th></th>
+      <th>Actual</th><th>Last Year</th><th>% vs LY</th>
+      <th></th>
+      <th>Actual</th><th>Last Year</th><th>% vs LY</th>
+    </tr>
+  </thead><tbody>`;
+  rows.forEach(r => {
+    const isTotal = r.label === 'Grand total';
+    html += `<tr class="${isTotal ? 'total' : ''}">`;
+    html += td(r.label, 'label');
+    html += td(fmtUsd(r.ars));
+    html += td(fmtUsd(r.ars_ly));
+    html += td(fmtPct(r.ars_vs_ly), pctClass(r.ars_vs_ly));
+    html += `<td></td>`;
+    html += td(fmtNum(r.cajas));
+    html += td(fmtNum(r.cajas_ly));
+    html += td(fmtPct(r.cajas_vs_ly), pctClass(r.cajas_vs_ly));
+    html += `</tr>`;
+  });
+  html += `</tbody></table>`;
+  return html;
+}
+
+function renderFdelmotte(rowsVariedad, rowsCanal) {
+  return renderFdelmotteTabla('Por variedad', rowsVariedad)
+    + '<div style="height:28px"></div>'
+    + renderFdelmotteTabla('Por canal', rowsCanal);
+}
+
 // ---------- Stat tiles ----------
 function statTile(label, value, delta, deltaLabel) {
   const cls = delta === null || delta === 'N/A' ? '' : (delta >= 0 ? 'up' : 'down');
@@ -99,7 +147,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarModa
 // render aparte (gráficos de barras sin comparativo LY, en app.js) --
 // ver backend/snap.py para el `fdelmotte=1` que distingue el universo de
 // filas en el backend. ----------
-function crearSnapInstance({ dataElId, rootElId, qs }) {
+function crearSnapInstance({ dataElId, rootElId, qs, esFdelMotte }) {
   const root = document.getElementById(rootElId);
   if (!root) return null;
   let RAW = JSON.parse(document.getElementById(dataElId).textContent);
@@ -109,6 +157,19 @@ function crearSnapInstance({ dataElId, rootElId, qs }) {
   let periodoActivo = 'mes';
 
   function renderStats(period) {
+    if (esFdelMotte) {
+      const rows = period === 'mes' ? RAW.fdelmotte_canal_mes : RAW.fdelmotte_canal_ytd;
+      const total = rows.find(r => r.label === 'Grand total');
+      const domestic = rows.find(r => r.label === 'Grupo Colome Domestic');
+      const exportRow = rows.find(r => r.label === 'Grupo Colome Export');
+      let html = '';
+      html += statTile('Total Sales (ARS 000s)', '$' + fmtUsd(total.ars), total.ars_vs_ly, 'vs LY');
+      html += statTile('9L Equivalent (cajas)', fmtNum(total.cajas), total.cajas_vs_ly, 'vs LY');
+      html += statTile('Doméstico (ARS 000s)', '$' + fmtUsd(domestic ? domestic.ars : 0), domestic ? domestic.ars_vs_ly : 'N/A', 'vs LY');
+      html += statTile('Export (ARS 000s)', '$' + fmtUsd(exportRow ? exportRow.ars : 0), exportRow ? exportRow.ars_vs_ly : 'N/A', 'vs LY');
+      statRowEl.innerHTML = html;
+      return;
+    }
     const rows = period === 'mes' ? RAW.sbl_mes : RAW.sbl_ytd;
     const total = rows.find(r => r && r.label === 'TOTAL SALES');
     const domestic = rows.find(r => r && r.label === 'Grupo Colome Domestic');
@@ -124,6 +185,12 @@ function crearSnapInstance({ dataElId, rootElId, qs }) {
   function render(period) {
     periodoActivo = period;
     renderStats(period);
+    if (esFdelMotte) {
+      const variedad = period === 'mes' ? RAW.fdelmotte_variedad_mes : RAW.fdelmotte_variedad_ytd;
+      const canal = period === 'mes' ? RAW.fdelmotte_canal_mes : RAW.fdelmotte_canal_ytd;
+      sblTableEl.innerHTML = renderFdelmotte(variedad, canal);
+      return;
+    }
     sblTableEl.innerHTML = renderSbl(period === 'mes' ? RAW.sbl_mes : RAW.sbl_ytd);
   }
 
@@ -229,7 +296,7 @@ function crearSnapInstance({ dataElId, rootElId, qs }) {
 
 const snapInstances = [
   crearSnapInstance({ dataElId: 'colome-data', rootElId: 'snapConsolidado', qs: '' }),
-  crearSnapInstance({ dataElId: 'colome-data-fm', rootElId: 'snapFdelMotte', qs: 'fdelmotte=1' }),
+  crearSnapInstance({ dataElId: 'colome-data-fm', rootElId: 'snapFdelMotte', qs: 'fdelmotte=1', esFdelMotte: true }),
 ].filter(Boolean);
 
 // ---------- Selector de mes en el sidebar (pedido explícito de Ezequiel
