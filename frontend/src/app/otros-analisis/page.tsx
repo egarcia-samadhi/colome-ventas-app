@@ -532,15 +532,13 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
 //    vendedor ya hace exactamente eso en 1 click, sin tocar el resto.
 // 2. Rango de fechas libre, vista acumulada (la tabla principal sigue
 //    sumando TODO el rango, como antes).
-// 3. Drill-down SIEMPRE visible debajo de la tabla principal -- "Tendencia
-//    por período" (Cantidad/Descuento/Venta Neta mes a mes), usa el campo
-//    `periodo` que viaja en cada fila (agregado en ig_ventas.py), sin
-//    pedir un endpoint aparte. Corregido 2026-11-02 (2da vuelta, Ezequiel:
-//    "no ve el drill down que pedia ariel"): antes solo aparecía si se
-//    aislaba EXACTAMENTE 1 vendedor con el checkbox -- mecanismo no obvio,
-//    Ezequiel no lo encontró. Ahora siempre se muestra: "Total" (suma de
-//    todos los vendedores visibles) cuando no hay exactamente 1 tildado,
-//    o el nombre del vendedor cuando sí lo hay.
+// 3. Drill-down de tendencia por período -- intentado y luego sacado DEL
+//    TODO el mismo día (Ezequiel, después de ver 2 variantes: una donde
+//    solo aparecía aislando 1 vendedor, otra siempre visible con "Total":
+//    "no, sacalo del todo"). No queda ningún panel de tendencia en esta
+//    vista -- si se vuelve a pedir, el campo `periodo` ya viaja en cada
+//    fila (agregado en ig_ventas.py) para no tener que pedir un endpoint
+//    aparte.
 // 4. Descuento Comercial agregado como 3ra sub-columna por vendedor
 //    (Cantidad / Desc. Comercial / Venta Neta) -- Ariel pidió explícito
 //    "cantidad, desc comercial, neto". Margen queda para una iteración
@@ -661,30 +659,13 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
     (g) => g.rubro,
   );
 
-  // Drill-down SIEMPRE visible (bug real reportado por Ezequiel
-  // 2026-11-02: "no ve el drill down que pedia ariel" -- antes solo
-  // aparecía si se aislaba EXACTAMENTE 1 vendedor con el checkbox, un
-  // mecanismo no obvio; ahora siempre se muestra la tendencia por período
-  // del filtro actual -- "Total" (todos los vendedores visibles sumados)
-  // cuando no hay exactamente 1 tildado, o el nombre del vendedor cuando
-  // sí lo hay).
-  const vendedorAislado = vendedores.length === 1 ? vendedores[0] : null;
-  const tendencia = [...(() => {
-    const porPeriodo = new Map<string, { periodo: string; cantidad: number; ars: number; descuento: number }>();
-    for (const r of filtradas) {
-      const acc = porPeriodo.get(r.periodo) ?? { periodo: r.periodo, cantidad: 0, ars: 0, descuento: 0 };
-      acc.cantidad += r.cantidad; acc.ars += r.ars; acc.descuento += r.descuento;
-      porPeriodo.set(r.periodo, acc);
-    }
-    return porPeriodo.values();
-  })()].sort((a, b) => a.periodo.localeCompare(b.periodo));
-
   return (
     <div className="space-y-5">
+
       <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-[#1c1811]">Por Vendedor</h3>
-          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad, Descuento Comercial y Venta Neta (ARS) por artículo, separado por vendedor. Vista acumulada del rango -- la tendencia por período (debajo) se ve siempre, tildá un solo vendedor en el sidebar para verla de ese vendedor en particular.</p>
+          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad, Descuento Comercial y Venta Neta (ARS) por artículo, separado por vendedor. Vista acumulada del rango.</p>
         </div>
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
         {loading ? (
@@ -757,35 +738,6 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
           </div>
         )}
       </div>
-
-      <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-[#1c1811]">Tendencia por período — {vendedorAislado ?? "Total"}</h3>
-            <p className="text-[11px] text-[#847c68] mt-0.5">Drill-down del rango seleccionado, mes a mes{vendedorAislado ? "" : " (suma de todos los vendedores visibles -- tildá uno solo en el sidebar para ver su tendencia individual)"}.</p>
-          </div>
-          <div className="overflow-x-auto rounded-md border border-[#ece6d8]">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#f7f5f0]">
-                  <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Período</th>
-                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cantidad</th>
-                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
-                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Descuento Comercial</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tendencia.map((t) => (
-                  <tr key={t.periodo} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
-                    <td className="py-1.5 px-3 text-[#1c1811]">{t.periodo}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(t.cantidad)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(t.ars)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(t.descuento)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
     </div>
   );
 }
