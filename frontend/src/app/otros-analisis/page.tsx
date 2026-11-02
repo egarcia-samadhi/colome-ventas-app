@@ -690,8 +690,8 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                   {vendedores.map((v) => (
                     <Fragment key={v}>
                       <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] border-l border-[#ece6d8]">Cant.</th>
-                      <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">Desc. Com.</th>
                       <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">Venta Neta</th>
+                      <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68]">Desc. Com.</th>
                     </Fragment>
                   ))}
                   <SortTh label="Venta Neta" col="totalArs" sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68] border-l border-[#ece6d8]" />
@@ -713,8 +713,8 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                           return (
                             <Fragment key={v}>
                               <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{val ? fmtNum(val.cantidad) : "—"}</td>
-                              <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.descuento) : "—"}</td>
                               <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.ars) : "—"}</td>
+                              <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.descuento) : "—"}</td>
                             </Fragment>
                           );
                         })}
@@ -728,8 +728,8 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                         return (
                           <Fragment key={v}>
                             <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{val ? fmtNum(val.cantidad) : "—"}</td>
-                            <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.descuento) : "—"}</td>
                             <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.ars) : "—"}</td>
+                            <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.descuento) : "—"}</td>
                           </Fragment>
                         );
                       })}
@@ -754,8 +754,8 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                 <tr className="bg-[#f7f5f0]">
                   <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Período</th>
                   <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cantidad</th>
-                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Descuento Comercial</th>
                   <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Descuento Comercial</th>
                 </tr>
               </thead>
               <tbody>
@@ -763,8 +763,8 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                   <tr key={t.periodo} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
                     <td className="py-1.5 px-3 text-[#1c1811]">{t.periodo}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(t.cantidad)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(t.descuento)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(t.ars)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(t.descuento)}</td>
                   </tr>
                 ))}
               </tbody>
