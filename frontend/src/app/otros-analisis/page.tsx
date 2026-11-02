@@ -52,8 +52,15 @@ import { AppShell } from "@/components/AppShell";
 // comentarios en cada componente más abajo): también pasan a rango de
 // fechas libre + Descuento Comercial. Por SKU gana un ranking de productos
 // con Marca/Mercado como segmentadores + Precio Promedio. Por Vendedor
-// corrige un bug real de UX en los chips (ver `ChipsFiltro::onSoloEste`) y
-// suma un drill-down de tendencia por período cuando se aísla 1 vendedor.
+// suma un drill-down de tendencia por período cuando se tilda 1 solo
+// vendedor.
+//
+// Semántica de `ChipsFiltro` invertida el mismo día (pedido explícito de
+// Ezequiel, después de ver el filtro de Vendedor de Por Cliente: "deberia
+// venir todo destildado (para mostrar todo). si se filtra 1, 2 o 3,
+// muestre solo de esos vendedores. asi en las 3 pestañas") -- ver el
+// comentario completo en `ChipsFiltro` más abajo. Institucionalizado en
+// `00-Normas-de-Trabajo.md`.
 
 interface FilaCliente { vendedor: string; canal: string; cliente: string; cajas: number; cantidad: number; ars: number; descuento: number; mg_pct: number }
 interface FilaSku { rubro: string; c_articulo: string; d_articulo: string; oficina: string; cajas: number; cantidad: number; ars: number; descuento: number; mg_pct: number }
@@ -124,53 +131,50 @@ function BuscadorTexto({ valor, onChange, placeholder, label }: { valor: string;
 // Ezequiel 2026-10-19: "sacalo como pildora y ponelo con checkbox como
 // esta en panel de ventas"). Mismo dorado (#DCBE84/#b8975a) que usa esa
 // pantalla para el estado marcado.
-function ChipsFiltro({ label, opciones, ocultos, onToggle, onMostrarTodos, onSoloEste }: {
-  label: string; opciones: string[]; ocultos: Set<string>; onToggle: (v: string) => void; onMostrarTodos: () => void;
-  // "Solo" (agregado 2026-11-02, Ariel Culasso: "al seleccionar uno lo
-  // desmarca... si quiero ver uno en particular tengo que desmarcar todos
-  // uno a uno") -- un click aísla ESE valor (muestra solo ese, oculta el
-  // resto) sin tener que destildar manualmente cada chip restante.
-  onSoloEste?: (v: string) => void;
+//
+// Semántica invertida 2026-11-02 (pedido explícito de Ezequiel: "deberia
+// venir todo destildado (para mostrar todo). si se filtra 1, 2 o 3,
+// muestre solo de esos... asi en las 3 pestañas"): antes tildado=visible
+// (default: TODO tildado, destildar para ocultar) -- criterio al revés
+// de lo esperable, además con el agravante de que Ariel había pedido
+// "solo" para destildar todos los demás con 1 click (ver commit
+// anterior). Ahora `seleccionados` (vacío = sin filtro, se muestra TODO;
+// 1+ valores tildados = se muestra SOLO esos). "Solo" queda redundante
+// con este criterio (tildar nada más que ese valor ya hace lo mismo en 1
+// click) -- se saca, reemplazado por "Limpiar" (solo visible cuando hay
+// algo tildado, vuelve a "sin filtro").
+function ChipsFiltro({ label, opciones, seleccionados, onToggle, onLimpiar }: {
+  label: string; opciones: string[]; seleccionados: Set<string>; onToggle: (v: string) => void; onLimpiar: () => void;
 }) {
   if (opciones.length === 0) return null;
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-[10px] uppercase tracking-wide text-white/40">{label}</label>
-        {ocultos.size > 0 && (
-          <button onClick={onMostrarTodos} className="text-[10px] text-[#DCBE84] hover:text-white underline">Todos</button>
+        {seleccionados.size > 0 && (
+          <button onClick={onLimpiar} className="text-[10px] text-[#DCBE84] hover:text-white underline">Limpiar</button>
         )}
       </div>
       <div className="flex flex-col gap-1">
         {opciones.map((v) => {
-          const activo = !ocultos.has(v);
+          const activo = seleccionados.has(v);
           return (
-            <div
+            <label
               key={v}
-              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-[10px] text-[12px] transition ${
+              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-[10px] text-[12px] cursor-pointer transition ${
                 activo
                   ? "bg-gradient-to-br from-[#e7cd9c] to-[#DCBE84] text-[#1c1811] font-semibold"
                   : "bg-white/5 text-white/75 hover:bg-white/10"
               }`}
             >
-              <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
-                <input
-                  type="checkbox"
-                  checked={activo}
-                  onChange={() => onToggle(v)}
-                  className="accent-[#b8975a] shrink-0"
-                />
-                <span className="truncate">{v}</span>
-              </label>
-              {onSoloEste && (
-                <button
-                  onClick={() => onSoloEste(v)}
-                  className={`text-[10px] underline shrink-0 ${activo ? "text-[#1c1811]/60 hover:text-[#1c1811]" : "text-white/40 hover:text-white"}`}
-                >
-                  solo
-                </button>
-              )}
-            </div>
+              <input
+                type="checkbox"
+                checked={activo}
+                onChange={() => onToggle(v)}
+                className="accent-[#b8975a] shrink-0"
+              />
+              <span className="truncate">{v}</span>
+            </label>
           );
         })}
       </div>
@@ -212,18 +216,18 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
   const [hasta, setHasta] = useState(hastaDefault);
   const [busqueda, setBusqueda] = useState("");
   const [segmentador, setSegmentador] = useState<Segmentador>("vendedor");
-  const [segmentoOcultos, setSegmentoOcultos] = useState<Set<string>>(new Set());
+  const [segmentoSeleccion, setSegmentoSeleccion] = useState<Set<string>>(new Set());
   const { rows, loading, error } = useOtrosAnalisisRango<FilaCliente>("por-cliente", desde, hasta);
 
-  // Cambiar de segmentador (Vendedor<->Canal) resetea los chips ocultos --
-  // los valores de un dimensión no tienen sentido como filtro de la otra.
+  // Cambiar de segmentador (Vendedor<->Canal) resetea la selección -- los
+  // valores de una dimensión no tienen sentido como filtro de la otra.
   const cambiarSegmentador = (s: Segmentador) => {
     setSegmentador(s);
-    setSegmentoOcultos(new Set());
+    setSegmentoSeleccion(new Set());
   };
 
   const opcionesSegmento = [...new Set(rows.map((r) => r[segmentador]))].sort(porNombre);
-  const toggleSegmento = (v: string) => setSegmentoOcultos((prev) => {
+  const toggleSegmento = (v: string) => setSegmentoSeleccion((prev) => {
     const next = new Set(prev);
     if (next.has(v)) next.delete(v); else next.add(v);
     return next;
@@ -253,19 +257,18 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
         <ChipsFiltro
           label={segmentador === "vendedor" ? "Vendedores" : "Canales"}
           opciones={opcionesSegmento}
-          ocultos={segmentoOcultos}
+          seleccionados={segmentoSeleccion}
           onToggle={toggleSegmento}
-          onMostrarTodos={() => setSegmentoOcultos(new Set())}
-          onSoloEste={(v) => setSegmentoOcultos(new Set(opcionesSegmento.filter((o) => o !== v)))}
+          onLimpiar={() => setSegmentoSeleccion(new Set())}
         />
       </div>
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [desde, hasta, busqueda, segmentador, segmentoOcultos, onFiltros, opcionesSegmento.join("|")]);
+  }, [desde, hasta, busqueda, segmentador, segmentoSeleccion, onFiltros, opcionesSegmento.join("|")]);
 
   const texto = normalizar(busqueda.trim());
   const filtradas = rows.filter((r) => {
-    if (segmentoOcultos.has(r[segmentador])) return false;
+    if (segmentoSeleccion.size > 0 && !segmentoSeleccion.has(r[segmentador])) return false;
     if (texto && !normalizar(r.cliente).includes(texto)) return false;
     return true;
   });
@@ -352,8 +355,8 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
   const [desde, setDesde] = useState(desdeDefault);
   const [hasta, setHasta] = useState(hastaDefault);
   const [busqueda, setBusqueda] = useState("");
-  const [marcasOcultas, setMarcasOcultas] = useState<Set<string>>(new Set());
-  const [mercadosOcultos, setMercadosOcultos] = useState<Set<string>>(new Set());
+  const [marcasSeleccion, setMarcasSeleccion] = useState<Set<string>>(new Set());
+  const [mercadosSeleccion, setMercadosSeleccion] = useState<Set<string>>(new Set());
   const { rows, loading, error } = useOtrosAnalisisRango<FilaSku>("por-sku", desde, hasta);
 
   const marcas = [...new Set(rows.map((r) => r.rubro))].sort(porNombre);
@@ -372,27 +375,26 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
         <ChipsFiltro
           label="Marca"
           opciones={marcas}
-          ocultos={marcasOcultas}
-          onToggle={toggleSet(marcasOcultas, setMarcasOcultas)}
-          onMostrarTodos={() => setMarcasOcultas(new Set())}
-          onSoloEste={(v) => setMarcasOcultas(new Set(marcas.filter((m) => m !== v)))}
+          seleccionados={marcasSeleccion}
+          onToggle={toggleSet(marcasSeleccion, setMarcasSeleccion)}
+          onLimpiar={() => setMarcasSeleccion(new Set())}
         />
         <ChipsFiltro
           label="Mercado"
           opciones={mercados}
-          ocultos={mercadosOcultos}
-          onToggle={toggleSet(mercadosOcultos, setMercadosOcultos)}
-          onMostrarTodos={() => setMercadosOcultos(new Set())}
-          onSoloEste={(v) => setMercadosOcultos(new Set(mercados.filter((m) => m !== v)))}
+          seleccionados={mercadosSeleccion}
+          onToggle={toggleSet(mercadosSeleccion, setMercadosSeleccion)}
+          onLimpiar={() => setMercadosSeleccion(new Set())}
         />
       </div>
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [desde, hasta, busqueda, marcasOcultas, mercadosOcultos, onFiltros, marcas.join("|"), mercados.join("|")]);
+  }, [desde, hasta, busqueda, marcasSeleccion, mercadosSeleccion, onFiltros, marcas.join("|"), mercados.join("|")]);
 
   const texto = normalizar(busqueda.trim());
   const filtradas = rows.filter((r) => {
-    if (marcasOcultas.has(r.rubro) || mercadosOcultos.has(r.oficina)) return false;
+    if (marcasSeleccion.size > 0 && !marcasSeleccion.has(r.rubro)) return false;
+    if (mercadosSeleccion.size > 0 && !mercadosSeleccion.has(r.oficina)) return false;
     if (texto && !normalizar(r.d_articulo).includes(texto)) return false;
     return true;
   });
@@ -469,15 +471,17 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
 // 1. Bug de UX real corregido: el criterio de los chips (tildado=visible)
 //    obligaba a destildar TODOS los demás vendedores uno a uno para ver
 //    uno solo ("me fue dificultoso seleccionar un vendedor particular...
-//    debemos cambiar el criterio"). Se agrega "solo" (ver `ChipsFiltro`,
-//    `onSoloEste`) -- un click aísla un vendedor sin tocar el resto.
+//    debemos cambiar el criterio"). Con la semántica invertida de
+//    `ChipsFiltro` (ver su comentario -- pedido explícito de Ezequiel el
+//    mismo día, DESPUÉS de este fix: "deberia venir todo destildado...
+//    si se filtra 1, 2 o 3, muestre solo de esos") tildar un solo
+//    vendedor ya hace exactamente eso en 1 click, sin tocar el resto.
 // 2. Rango de fechas libre, vista acumulada (la tabla principal sigue
 //    sumando TODO el rango, como antes).
-// 3. Drill-down: cuando queda UN SOLO vendedor visible (vía "solo" o
-//    destildando manualmente al resto), aparece debajo una tabla de
-//    "Tendencia por período" para ESE vendedor -- usa el campo `periodo`
-//    que ahora viaja en cada fila (agregado en ig_ventas.py), sin pedir un
-//    endpoint aparte.
+// 3. Drill-down: cuando queda UN SOLO vendedor tildado, aparece debajo
+//    una tabla de "Tendencia por período" para ESE vendedor -- usa el
+//    campo `periodo` que ahora viaja en cada fila (agregado en
+//    ig_ventas.py), sin pedir un endpoint aparte.
 // 4. Descuento Comercial agregado como 3ra sub-columna por vendedor
 //    (Cantidad / Desc. Comercial / Venta Neta) -- Ariel pidió explícito
 //    "cantidad, desc comercial, neto". Margen queda para una iteración
@@ -487,7 +491,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
   const [desde, setDesde] = useState(desdeDefault);
   const [hasta, setHasta] = useState(hastaDefault);
   const [busqueda, setBusqueda] = useState("");
-  const [vendedoresOcultos, setVendedoresOcultos] = useState<Set<string>>(new Set());
+  const [vendedoresSeleccion, setVendedoresSeleccion] = useState<Set<string>>(new Set());
   const { rows, loading, error } = useOtrosAnalisisRango<FilaVendedor>("por-vendedor", desde, hasta);
 
   // Chips de vendedor para elegir qué columnas mostrar -- la tabla pivotea
@@ -495,7 +499,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
   // (pedido explícito de Ezequiel 2026-10-19: "esta algo bruto diagramado").
   const todosVendedores = [...new Set(rows.map((r) => r.vendedor))].sort(porNombre);
 
-  const toggleVendedor = (v: string) => setVendedoresOcultos((prev) => {
+  const toggleVendedor = (v: string) => setVendedoresSeleccion((prev) => {
     const next = new Set(prev);
     if (next.has(v)) next.delete(v); else next.add(v);
     return next;
@@ -509,19 +513,18 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
         <ChipsFiltro
           label="Vendedores"
           opciones={todosVendedores}
-          ocultos={vendedoresOcultos}
+          seleccionados={vendedoresSeleccion}
           onToggle={toggleVendedor}
-          onMostrarTodos={() => setVendedoresOcultos(new Set())}
-          onSoloEste={(v) => setVendedoresOcultos(new Set(todosVendedores.filter((x) => x !== v)))}
+          onLimpiar={() => setVendedoresSeleccion(new Set())}
         />
       </div>
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [desde, hasta, busqueda, vendedoresOcultos, onFiltros, todosVendedores.join("|")]);
+  }, [desde, hasta, busqueda, vendedoresSeleccion, onFiltros, todosVendedores.join("|")]);
 
   const texto = normalizar(busqueda.trim());
   const filtradas = rows.filter((r) => {
-    if (vendedoresOcultos.has(r.vendedor)) return false;
+    if (vendedoresSeleccion.size > 0 && !vendedoresSeleccion.has(r.vendedor)) return false;
     if (!texto) return true;
     return normalizar(r.rubro).includes(texto) || normalizar(r.d_articulo).includes(texto);
   });
@@ -571,7 +574,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
       <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-[#1c1811]">Por Vendedor</h3>
-          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad, Descuento Comercial y Venta Neta (ARS) por artículo, separado por vendedor. Vista acumulada del rango -- aislá un vendedor ("solo" en el sidebar) para ver su tendencia por período.</p>
+          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad, Descuento Comercial y Venta Neta (ARS) por artículo, separado por vendedor. Vista acumulada del rango -- tildá un solo vendedor en el sidebar para ver su tendencia por período.</p>
         </div>
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
         {loading ? (
