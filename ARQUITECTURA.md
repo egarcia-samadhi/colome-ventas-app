@@ -125,15 +125,28 @@ jerárquicamente relacionados en cualquier proyecto).
    siguiente, que hace innecesario ese link.
 2. Rango de fechas libre, **vista acumulada** (la tabla principal sigue
    sumando todo el rango sin desglosar por mes).
-3. **Drill-down de tendencia**: cuando queda EXACTAMENTE 1 vendedor
-   tildado, aparece debajo un panel "Tendencia por período"
-   (Cantidad/Descuento/Venta Neta por mes) -- usa el campo `periodo`
-   (YYYY-MM) que ahora viaja en cada fila agregada por
+3. **Drill-down de tendencia**: panel "Tendencia por período"
+   (Cantidad/Venta Neta/Descuento Comercial por mes) -- usa el campo
+   `periodo` (YYYY-MM) que viaja en cada fila agregada por
    `ventas_por_vendedor()`, calculado client-side del mismo payload sin
-   pedir un endpoint aparte.
-4. **Descuento Comercial** agregado como 3ra sub-columna por vendedor
-   (Cantidad/Desc. Comercial/Venta Neta). Margen queda pendiente para una
-   iteración futura (Ariel: "dps le agregaremos el margen").
+   pedir un endpoint aparte. **2da vuelta el mismo día** (Ezequiel: "no ve
+   el drill down que pedia ariel"): el panel SOLO aparecía si se aislaba
+   EXACTAMENTE 1 vendedor tildado -- mecanismo no obvio, no se veía. Ahora
+   está SIEMPRE visible: título "Tendencia por período — Total" (suma de
+   todos los vendedores en el filtro actual) por default, o el nombre del
+   vendedor cuando se tilda uno solo.
+4. **Descuento Comercial** agregado como 3ra sub-columna por vendedor.
+   Margen queda pendiente para una iteración futura (Ariel: "dps le
+   agregaremos el margen"). Orden de columnas corregido el mismo día
+   (Ezequiel): Cantidad/Venta Neta/Descuento Comercial (no Cantidad/
+   Descuento/Venta Neta), tanto en la tabla principal como en el panel
+   de tendencia.
+5. **Bug real corregido el mismo día** (Ezequiel: "los subtotales no veo
+   que sumen"): la fila "Total {rubro}" dejaba en blanco las celdas de
+   Cantidad/Descuento Comercial por vendedor, solo mostraba el total
+   general de la derecha -- `totalPorVendedor` (Map por grupo) ahora suma
+   cantidad/ars/descuento de cada vendedor a través de las filas del
+   rubro.
 
 ### `ChipsFiltro`: semántica invertida (2026-11-02, mismo día, pedido de Ezequiel)
 
