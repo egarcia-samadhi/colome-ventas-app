@@ -532,10 +532,15 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
 //    vendedor ya hace exactamente eso en 1 click, sin tocar el resto.
 // 2. Rango de fechas libre, vista acumulada (la tabla principal sigue
 //    sumando TODO el rango, como antes).
-// 3. Drill-down: cuando queda UN SOLO vendedor tildado, aparece debajo
-//    una tabla de "Tendencia por período" para ESE vendedor -- usa el
-//    campo `periodo` que ahora viaja en cada fila (agregado en
-//    ig_ventas.py), sin pedir un endpoint aparte.
+// 3. Drill-down SIEMPRE visible debajo de la tabla principal -- "Tendencia
+//    por período" (Cantidad/Descuento/Venta Neta mes a mes), usa el campo
+//    `periodo` que viaja en cada fila (agregado en ig_ventas.py), sin
+//    pedir un endpoint aparte. Corregido 2026-11-02 (2da vuelta, Ezequiel:
+//    "no ve el drill down que pedia ariel"): antes solo aparecía si se
+//    aislaba EXACTAMENTE 1 vendedor con el checkbox -- mecanismo no obvio,
+//    Ezequiel no lo encontró. Ahora siempre se muestra: "Total" (suma de
+//    todos los vendedores visibles) cuando no hay exactamente 1 tildado,
+//    o el nombre del vendedor cuando sí lo hay.
 // 4. Descuento Comercial agregado como 3ra sub-columna por vendedor
 //    (Cantidad / Desc. Comercial / Venta Neta) -- Ariel pidió explícito
 //    "cantidad, desc comercial, neto". Margen queda para una iteración
@@ -622,34 +627,49 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
         (f, col) => col === "d_articulo" ? f.d_articulo : f.totalArs,
       );
       const totalRubroArs = filas.reduce((a, f) => a + f.totalArs, 0);
-      return { rubro, filas, totalRubroArs };
+      // Subtotal por vendedor de la fila "Total {rubro}" (bug real
+      // reportado por Ezequiel 2026-11-02: "los subtotales no veo que
+      // sumen" -- la fila de total dejaba las celdas de Cant./Desc. Com.
+      // por vendedor vacías, solo mostraba el total general de la
+      // derecha).
+      const totalPorVendedor = new Map<string, { cantidad: number; ars: number; descuento: number }>();
+      for (const f of filas) {
+        for (const [v, val] of f.porVendedor) {
+          const acc = totalPorVendedor.get(v) ?? { cantidad: 0, ars: 0, descuento: 0 };
+          acc.cantidad += val.cantidad; acc.ars += val.ars; acc.descuento += val.descuento;
+          totalPorVendedor.set(v, acc);
+        }
+      }
+      return { rubro, filas, totalRubroArs, totalPorVendedor };
     }),
     { col: "rubro", dir: sort.col === "rubro" ? sort.dir : "asc" },
     (g) => g.rubro,
   );
 
-  // Drill-down: SOLO cuando queda exactamente 1 vendedor visible -- "la
-  // tendencia por el período seleccionado" de ESE vendedor, agrupado por
-  // mes calendario (campo `periodo` de cada fila).
+  // Drill-down SIEMPRE visible (bug real reportado por Ezequiel
+  // 2026-11-02: "no ve el drill down que pedia ariel" -- antes solo
+  // aparecía si se aislaba EXACTAMENTE 1 vendedor con el checkbox, un
+  // mecanismo no obvio; ahora siempre se muestra la tendencia por período
+  // del filtro actual -- "Total" (todos los vendedores visibles sumados)
+  // cuando no hay exactamente 1 tildado, o el nombre del vendedor cuando
+  // sí lo hay).
   const vendedorAislado = vendedores.length === 1 ? vendedores[0] : null;
-  const tendencia = vendedorAislado
-    ? [...(() => {
-        const porPeriodo = new Map<string, { periodo: string; cantidad: number; ars: number; descuento: number }>();
-        for (const r of filtradas) {
-          const acc = porPeriodo.get(r.periodo) ?? { periodo: r.periodo, cantidad: 0, ars: 0, descuento: 0 };
-          acc.cantidad += r.cantidad; acc.ars += r.ars; acc.descuento += r.descuento;
-          porPeriodo.set(r.periodo, acc);
-        }
-        return porPeriodo.values();
-      })()].sort((a, b) => a.periodo.localeCompare(b.periodo))
-    : [];
+  const tendencia = [...(() => {
+    const porPeriodo = new Map<string, { periodo: string; cantidad: number; ars: number; descuento: number }>();
+    for (const r of filtradas) {
+      const acc = porPeriodo.get(r.periodo) ?? { periodo: r.periodo, cantidad: 0, ars: 0, descuento: 0 };
+      acc.cantidad += r.cantidad; acc.ars += r.ars; acc.descuento += r.descuento;
+      porPeriodo.set(r.periodo, acc);
+    }
+    return porPeriodo.values();
+  })()].sort((a, b) => a.periodo.localeCompare(b.periodo));
 
   return (
     <div className="space-y-5">
       <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-[#1c1811]">Por Vendedor</h3>
-          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad, Descuento Comercial y Venta Neta (ARS) por artículo, separado por vendedor. Vista acumulada del rango -- tildá un solo vendedor en el sidebar para ver su tendencia por período.</p>
+          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad, Descuento Comercial y Venta Neta (ARS) por artículo, separado por vendedor. Vista acumulada del rango -- la tendencia por período (debajo) se ve siempre, tildá un solo vendedor en el sidebar para verla de ese vendedor en particular.</p>
         </div>
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
         {loading ? (
@@ -703,7 +723,16 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                     ))}
                     <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
                       <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap" colSpan={2}>Total {g.rubro}</td>
-                      {vendedores.map((v) => <Fragment key={v}><td className="border-l border-[#ece6d8]" /><td /><td /></Fragment>)}
+                      {vendedores.map((v) => {
+                        const val = g.totalPorVendedor.get(v);
+                        return (
+                          <Fragment key={v}>
+                            <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{val ? fmtNum(val.cantidad) : "—"}</td>
+                            <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.descuento) : "—"}</td>
+                            <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.ars) : "—"}</td>
+                          </Fragment>
+                        );
+                      })}
                       <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{fmtNum(g.totalRubroArs)}</td>
                     </tr>
                   </Fragment>
@@ -714,11 +743,10 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
         )}
       </div>
 
-      {vendedorAislado && (
-        <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
+      <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
           <div className="mb-4">
-            <h3 className="text-sm font-semibold text-[#1c1811]">Tendencia por período — {vendedorAislado}</h3>
-            <p className="text-[11px] text-[#847c68] mt-0.5">Drill-down del rango seleccionado, mes a mes.</p>
+            <h3 className="text-sm font-semibold text-[#1c1811]">Tendencia por período — {vendedorAislado ?? "Total"}</h3>
+            <p className="text-[11px] text-[#847c68] mt-0.5">Drill-down del rango seleccionado, mes a mes{vendedorAislado ? "" : " (suma de todos los vendedores visibles -- tildá uno solo en el sidebar para ver su tendencia individual)"}.</p>
           </div>
           <div className="overflow-x-auto rounded-md border border-[#ece6d8]">
             <table className="w-full text-sm">
@@ -743,7 +771,6 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
             </table>
           </div>
         </div>
-      )}
     </div>
   );
 }
