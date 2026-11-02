@@ -5,8 +5,12 @@ el dataset mock estático (`public/ventas/colome-data.json`, clave `sbl_aug`/
 `sbl_ytd`) -- MISMO esquema de filas que consumía `snap.js`. Budget por
 línea agregado 2026-11-02 (ver `_agregado_budget_linea` más abajo) --
 revierte la decisión del 2026-10-09 ("nunca existió un dato real, se saca"),
-que se basaba en un archivo donde la columna SÍ venía vacía; el SNAP real
-que Ariel manda mes a mes SÍ trae Budget por línea.
+que se basaba en un archivo donde la columna SÍ venía vacía. Fuente ÚNICA
+con el Budget TOTAL de Panel de Ventas (`_budget_mensual`, más abajo):
+`Budget_Dinamico.xlsx` clasificado por línea -- Ezequiel pidió explícitamente
+("no podemos usar fuentes distintas") no mezclar el Budget por línea del
+SNAP real de Ariel (que trae un total ~1.5-2% distinto) con el Budget total
+ya usado en Panel de Ventas.
 
 Jerarquía de totales (reconstruida comparando los números reales del mock
 el 2026-10-19, no inventada -- confirmado con Ezequiel):
@@ -136,39 +140,35 @@ def _budget_mensual() -> dict[str, list[float]]:
 # Budget POR LÍNEA de negocio (agregado 2026-11-02, Ezequiel: "en el snap
 # (hoja sales performance) tenia budget, y nosotros no lo cargamos" -- la
 # decisión del 2026-10-09 de sacar Budget de esta hoja se basaba en
-# `YTD - Snap - ly.xlsx`, donde la columna Budget SÍ venía vacía. El archivo
-# que Ezequiel compartió ahora (`SNAP I September 2026 - NM - VSP 2.xls`,
-# hoja "Sales by line of bussines") SÍ la trae poblada por línea, tanto en
-# el bloque Monthly como en el YTD -- la decisión anterior quedó obsoleta
-# para esta hoja en particular (el Budget TOTAL de Panel de Ventas, agregado
-# 2026-10-20 desde `Budget_Dinamico.xlsx`, es un source DISTINTO y sigue
-# vigente sin cambios, ver `_budget_mensual` arriba).
+# `YTD - Snap - ly.xlsx`, donde la columna Budget venía vacía).
 #
-# Fuente: 2 reportes SNAP reales que Ariel manda mes a mes (`Informacion
-# recibida/SNAP I Aug 2026 - NM - vsp.xls`, `SNAP I September 2026 - NM -
-# VSP 2.xls`), bloque "Monthly" (filas 0-30 de la hoja, ANTES del bloque YTD
-# que repite las mismas etiquetas de fila más abajo -- un extractor ingenuo
-# que no corta en la fila "TOTAL SALES" del bloque Monthly termina leyendo
-# el valor YTD en vez del mensual, se pisan por nombre de fila igual).
-# Julio (2026-07, P01) no tiene reporte SNAP propio (el primer SNAP
-# recibido es de agosto) -- se derivó restando el bloque YTD del archivo de
-# agosto ("YTD: July 2026 to August 2026") menos su propio bloque Monthly
-# de agosto: Budget(jul) = Budget(YTD jul+ago) - Budget(ago). Validado
-# contra el propio archivo: ambos bloques ya vienen cuadrados internamente
-# (Domestic+Export+DTC = TOTAL SALES TO THIRD PARTIES en los 2 bloques).
+# PRIMER INTENTO (mismo día, descartado): extraer el Budget por línea
+# directo del SNAP real que Ariel manda mes a mes (`SNAP I Aug/September
+# 2026 - NM - vsp.xls`, hoja "Sales by line of bussines", que SÍ trae esa
+# columna poblada). Ezequiel cortó al toque: *"no podemos usar fuentes
+# distintas"* -- el total de ESE archivo no coincide centavo a centavo con
+# `budget_2026_2027.json` (Budget TOTAL de Panel de Ventas, ~1.5-2% de
+# diferencia), dos equipos/momentos distintos de Ariel armando el mismo
+# número. Se descartó esa fixture y se reconstruyó como sigue.
 #
-# Nota: el TOTAL por línea de este archivo NO coincide centavo a centavo
-# con `budget_2026_2027.json` (~1.5-2% de diferencia en los meses donde se
-# pudo comparar) -- son 2 fuentes distintas del equipo de Ariel (una por
-# SKU/mes/canal reconstruida acá, otra el SNAP ya consolidado por él,
-# probablemente con un ajuste de precio posterior aplicado a una y no a la
-# otra) -- no se intentó reconciliar, cada tabla usa su propia fuente como
-# venía haciendo hasta ahora.
+# FUENTE ÚNICA, la misma que `_budget_mensual` (arriba): `Budget_Dinamico.
+# xlsx`, hoja "Datos" (2.330 filas SKU/mes/Canal/Mercado). Clasificado por
+# línea de negocio vía el campo `Mercado` (no `Canal`, que solo distingue
+# "Mercado Local"/"Exportación"): `E-commerce`->E-commerce; `Distrib. Bs.
+# As.`/`Interior`/`Distrib. NOA`->Grupo Colome Domestic; `HCVC - Hotel`->
+# Colome Hotel; `HCVC - VC Col`->Colome Visitor Center; `HCVC - VC Cafa`->
+# Cafayate Visitor Center; el resto (UE/Brasil/Reino Unido/USA/Suiza/Asia/
+# Canadá/Resto L.A./Caribe/México)->Grupo Colome Export. `Employees` no
+# tiene `Mercado` propio en este archivo -- 0 fijo, igual que en el SNAP
+# real (nunca tuvo Budget). **Validado exacto**: la suma de las 7 líneas de
+# cada mes reproduce el total de `budget_2026_2027.json` centavo a centavo
+# (diferencia ≤ USD 0,01 por redondeo, en los 12 meses del ejercicio) --
+# misma fuente, una sola clasificación, Panel de Ventas y Sales Performance
+# SIEMPRE van a sumar lo mismo para el Budget total.
 #
-# Disponibilidad: SOLO los meses de los que Ariel ya mandó un SNAP real
-# (hoy jul-sep 2026) -- un mes sin fixture queda "n/d", mismo criterio que
-# LY/Budget total. Crece agregando una entrada por mes a medida que lleguen
-# más reportes (mismo patrón que `lfy_jul_ago_2025.json`).
+# Nro_Mes del archivo mapeado directo a 2026-07..2027-06 (mismo criterio
+# que `_budget_mensual`, el campo `Año_Fiscal` del archivo está mal
+# etiquetado como "2025-2026").
 BUDGET_LINEA_RUTA = Path(__file__).parent / "budget_linea_2026_2027.json"
 _budget_linea_cache: dict[str, dict[str, list[float]]] | None = None
 

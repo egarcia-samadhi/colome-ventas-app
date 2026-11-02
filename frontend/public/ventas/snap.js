@@ -26,10 +26,11 @@ function td(content, cls) {
 }
 
 // ---------- Sales by Line of Business (conectado en vivo 2026-10-19 a
-// /api/ventas/snap -- ver backend/snap.py. Last Year y Budget solo se
-// muestran cuando hay dato real del mismo rango -- Budget por línea
-// agregado 2026-11-02, disponible SOLO para los meses de los que Ariel ya
-// mandó un SNAP real (jul-sep 2026 al día de hoy), "n/d" el resto.) ------
+// /api/ventas/snap -- ver backend/snap.py. Last Year solo se muestra
+// cuando hay dato real del mismo rango. Budget por línea agregado
+// 2026-11-02 -- misma fuente que el Budget TOTAL de Panel de Ventas
+// (Budget_Dinamico.xlsx clasificado por línea, ver snap.py), cubre los 12
+// meses del ejercicio 2026-2027.) ----------
 const SBL_TOTAL_ROWS = new Set(['TOTAL SALES TO THIRD PARTIES', 'TOTAL SALES', 'Total Grupo Colome Brand', 'Total Buyers Own Brand (BOB)', 'Total Intercompany Sales', 'Direct-to-consumer Channel']);
 
 function renderSbl(rows) {

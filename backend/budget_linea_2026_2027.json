@@ -1,29 +1,362 @@
 {
   "2026-07": {
-    "Grupo Colome Domestic": [401645.40, 6687.5],
-    "Grupo Colome Export": [107330.04, 1969.5],
-    "Employees": [0.0, 0.0],
-    "E-commerce": [29310.81, 381.5],
-    "Colome Hotel": [2009.71, 8.08],
-    "Colome Visitor Center": [8780.66, 46.5],
-    "Cafayate Visitor Center": [15934.61, 115.5]
+    "Cafayate Visitor Center": [
+      16412.64,
+      115.5
+    ],
+    "Colome Hotel": [
+      2070.0,
+      8.08
+    ],
+    "Colome Visitor Center": [
+      9044.07,
+      46.5
+    ],
+    "E-commerce": [
+      30190.14,
+      381.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      413694.77,
+      6687.5
+    ],
+    "Grupo Colome Export": [
+      107330.04,
+      1969.5
+    ]
   },
   "2026-08": {
-    "Grupo Colome Domestic": [440457.88, 7575.5],
-    "Grupo Colome Export": [339543.67, 7604.0],
-    "Employees": [0.0, 0.0],
-    "E-commerce": [28390.84, 376.5],
-    "Colome Hotel": [2542.75, 10.37],
-    "Colome Visitor Center": [8929.95, 48.0],
-    "Cafayate Visitor Center": [10703.94, 78.75]
+    "Cafayate Visitor Center": [
+      11025.06,
+      78.75
+    ],
+    "Colome Hotel": [
+      2619.03,
+      10.37
+    ],
+    "Colome Visitor Center": [
+      9197.85,
+      48.0
+    ],
+    "E-commerce": [
+      29242.56,
+      376.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      453671.62,
+      7575.5
+    ],
+    "Grupo Colome Export": [
+      339543.67,
+      7604.0
+    ]
   },
   "2026-09": {
-    "Grupo Colome Domestic": [477224.91, 8454.5],
-    "Grupo Colome Export": [454902.06, 8407.5],
-    "Employees": [0.0, 0.0],
-    "E-commerce": [27971.27, 376.5],
-    "Colome Hotel": [2772.12, 11.47],
-    "Colome Visitor Center": [10905.83, 59.5],
-    "Cafayate Visitor Center": [10560.28, 78.75]
+    "Cafayate Visitor Center": [
+      10877.08,
+      78.75
+    ],
+    "Colome Hotel": [
+      2855.28,
+      11.47
+    ],
+    "Colome Visitor Center": [
+      11233.01,
+      59.5
+    ],
+    "E-commerce": [
+      28810.41,
+      376.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      491541.65,
+      8454.5
+    ],
+    "Grupo Colome Export": [
+      454902.06,
+      8407.5
+    ]
+  },
+  "2026-10": {
+    "Cafayate Visitor Center": [
+      11300.9,
+      78.75
+    ],
+    "Colome Hotel": [
+      3278.68,
+      12.67
+    ],
+    "Colome Visitor Center": [
+      10606.47,
+      54.0
+    ],
+    "E-commerce": [
+      34444.58,
+      376.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      502962.87,
+      8260.5
+    ],
+    "Grupo Colome Export": [
+      283867.06,
+      6274.5
+    ]
+  },
+  "2026-11": {
+    "Cafayate Visitor Center": [
+      11133.89,
+      78.75
+    ],
+    "Colome Hotel": [
+      3815.57,
+      14.96
+    ],
+    "Colome Visitor Center": [
+      11127.02,
+      57.5
+    ],
+    "E-commerce": [
+      33935.55,
+      376.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      680518.76,
+      11694.0
+    ],
+    "Grupo Colome Export": [
+      217594.25,
+      3932.5
+    ]
+  },
+  "2026-12": {
+    "Cafayate Visitor Center": [
+      8044.19,
+      57.75
+    ],
+    "Colome Hotel": [
+      2029.11,
+      8.08
+    ],
+    "Colome Visitor Center": [
+      4099.05,
+      21.5
+    ],
+    "E-commerce": [
+      33434.04,
+      376.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      636172.93,
+      10955.0
+    ],
+    "Grupo Colome Export": [
+      430932.65,
+      8669.5
+    ]
+  },
+  "2027-01": {
+    "Cafayate Visitor Center": [
+      14426.65,
+      105.0
+    ],
+    "Colome Hotel": [
+      1999.12,
+      8.08
+    ],
+    "Colome Visitor Center": [
+      4977.65,
+      26.5
+    ],
+    "E-commerce": [
+      41105.94,
+      376.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      320757.59,
+      4980.5
+    ],
+    "Grupo Colome Export": [
+      235561.44,
+      5328.0
+    ]
+  },
+  "2027-02": {
+    "Cafayate Visitor Center": [
+      16365.96,
+      115.5
+    ],
+    "Colome Hotel": [
+      2346.57,
+      9.18
+    ],
+    "Colome Visitor Center": [
+      5818.29,
+      30.0
+    ],
+    "E-commerce": [
+      40498.46,
+      376.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      342619.39,
+      5260.5
+    ],
+    "Grupo Colome Export": [
+      426731.7,
+      8304.0
+    ]
+  },
+  "2027-03": {
+    "Cafayate Visitor Center": [
+      11726.61,
+      84.0
+    ],
+    "Colome Hotel": [
+      2311.89,
+      9.18
+    ],
+    "Colome Visitor Center": [
+      8694.0,
+      45.5
+    ],
+    "E-commerce": [
+      39899.96,
+      376.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      442346.07,
+      7473.5
+    ],
+    "Grupo Colome Export": [
+      489058.13,
+      8763.5
+    ]
+  },
+  "2027-04": {
+    "Cafayate Visitor Center": [
+      14441.64,
+      105.0
+    ],
+    "Colome Hotel": [
+      2572.99,
+      10.37
+    ],
+    "Colome Visitor Center": [
+      10542.17,
+      56.0
+    ],
+    "E-commerce": [
+      49638.72,
+      376.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      443526.97,
+      7660.0
+    ],
+    "Grupo Colome Export": [
+      248357.04,
+      5810.0
+    ]
+  },
+  "2027-05": {
+    "Cafayate Visitor Center": [
+      8545.33,
+      63.0
+    ],
+    "Colome Hotel": [
+      1973.95,
+      8.08
+    ],
+    "Colome Visitor Center": [
+      7604.31,
+      41.0
+    ],
+    "E-commerce": [
+      48905.14,
+      376.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      432951.52,
+      7505.0
+    ],
+    "Grupo Colome Export": [
+      526763.47,
+      9897.0
+    ]
+  },
+  "2027-06": {
+    "Cafayate Visitor Center": [
+      8747.2,
+      63.0
+    ],
+    "Colome Hotel": [
+      0.0,
+      0.0
+    ],
+    "Colome Visitor Center": [
+      6461.33,
+      34.0
+    ],
+    "E-commerce": [
+      48182.41,
+      376.5
+    ],
+    "Employees": [
+      0.0,
+      0.0
+    ],
+    "Grupo Colome Domestic": [
+      490032.52,
+      8108.5
+    ],
+    "Grupo Colome Export": [
+      416900.53,
+      9310.5
+    ]
   }
 }
