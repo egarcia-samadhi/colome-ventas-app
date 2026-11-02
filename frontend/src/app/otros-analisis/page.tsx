@@ -38,8 +38,19 @@ import { AppShell } from "@/components/AppShell";
 // artículo no mostraba el rubro (solo aparecía en "Total <rubro>"), lo que
 // se veía como si esa columna estuviera vacía (reportado por Ezequiel:
 // "rubro/articulo esta sin datos").
+//
+// Por Cliente REDISEÑADO 2026-11-02 (pedido de Ariel Culasso vía Ezequiel,
+// "sí, tal cual lo pide"): deja de agrupar fijo por Vendedor -- pasa a ser
+// un RANKING de clientes (ordenado por Venta Neta desc), con Vendedor/Canal
+// como "segmentador" (filtro de chips, elegible cuál de los dos usar, no
+// una columna de la tabla). Período pasa de un selector de un solo mes a
+// un rango de fechas libre. Se agrega "Descuento Comercial" (antes "% Desc
+// C" se omitía -- ver docstring de `ventas_por_cliente` en ig_ventas.py
+// para el campo real encontrado, `m_desc_total`). Por SKU/Por Vendedor NO
+// se tocan, siguen con el diseño anterior (Ariel solo pidió esto para Por
+// Cliente).
 
-interface FilaCliente { vendedor: string; cliente: string; cajas: number; cantidad: number; ars: number; mg_pct: number }
+interface FilaCliente { vendedor: string; canal: string; cliente: string; cajas: number; cantidad: number; ars: number; descuento: number; mg_pct: number }
 interface FilaSku { rubro: string; c_articulo: string; d_articulo: string; oficina: string; cajas: number; mg_pct: number }
 interface FilaVendedor { rubro: string; c_articulo: string; d_articulo: string; vendedor: string; cantidad: number; ars: number; mg_pct: number }
 
@@ -71,6 +82,43 @@ function PeriodoSelect({ periodo, onChange }: { periodo: string; onChange: (p: s
       >
         {periodos.map((p) => <option key={p} value={p}>{p}</option>)}
       </select>
+    </div>
+  );
+}
+
+function mesCerradoAnteriorRango(): { desde: string; hasta: string } {
+  const hoy = new Date();
+  const anio = hoy.getMonth() === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear();
+  const mes = hoy.getMonth() === 0 ? 11 : hoy.getMonth() - 1; // 0-indexed
+  const desde = new Date(anio, mes, 1);
+  const hasta = new Date(anio, mes + 1, 0);
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return { desde: fmt(desde), hasta: fmt(hasta) };
+}
+
+// Rango de fechas libre (pedido de Ariel Culasso 2026-11-02, "Por Cliente"):
+// reemplaza el PeriodoSelect de un solo mes en esa vista puntual -- Por
+// SKU/Por Vendedor siguen con PeriodoSelect sin cambios.
+function RangoFechas({ desde, hasta, onChange }: { desde: string; hasta: string; onChange: (desde: string, hasta: string) => void }) {
+  return (
+    <div>
+      <label className="block text-[10px] uppercase tracking-wide text-white/40 mb-1.5">Período (rango de fechas)</label>
+      <div className="flex flex-col gap-1.5">
+        <input
+          type="date"
+          value={desde}
+          max={hasta}
+          onChange={(e) => onChange(e.target.value, hasta)}
+          className="w-full px-2.5 py-1.5 rounded-md border border-white/15 text-sm bg-white/5 text-white [color-scheme:dark]"
+        />
+        <input
+          type="date"
+          value={hasta}
+          min={desde}
+          onChange={(e) => onChange(desde, e.target.value)}
+          className="w-full px-2.5 py-1.5 rounded-md border border-white/15 text-sm bg-white/5 text-white [color-scheme:dark]"
+        />
+      </div>
     </div>
   );
 }
@@ -166,40 +214,114 @@ function useOtrosAnalisis<T>(endpoint: string, periodo: string) {
   return { rows, loading, error };
 }
 
+function useOtrosAnalisisRango<T>(endpoint: string, desde: string, hasta: string) {
+  const [rows, setRows] = useState<T[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    fetch(`/api/otros-analisis/${endpoint}?desde=${desde}&hasta=${hasta}`)
+      .then((r) => {
+        if (r.status === 401) { window.location.href = "/"; return null; }
+        if (!r.ok) throw new Error(`Error cargando ${endpoint}`);
+        return r.json();
+      })
+      .then((d) => { if (d) setRows(d.rows); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [endpoint, desde, hasta]);
+
+  useEffect(load, [load]);
+  return { rows, loading, error };
+}
+
+type Segmentador = "vendedor" | "canal";
+
 function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
-  const [periodo, setPeriodo] = useState(ultimosPeriodos()[0]);
+  const [{ desde: desdeDefault, hasta: hastaDefault }] = useState(mesCerradoAnteriorRango());
+  const [desde, setDesde] = useState(desdeDefault);
+  const [hasta, setHasta] = useState(hastaDefault);
   const [busqueda, setBusqueda] = useState("");
-  const { rows, loading, error } = useOtrosAnalisis<FilaCliente>("por-cliente", periodo);
+  const [segmentador, setSegmentador] = useState<Segmentador>("vendedor");
+  const [segmentoOcultos, setSegmentoOcultos] = useState<Set<string>>(new Set());
+  const { rows, loading, error } = useOtrosAnalisisRango<FilaCliente>("por-cliente", desde, hasta);
+
+  // Cambiar de segmentador (Vendedor<->Canal) resetea los chips ocultos --
+  // los valores de un dimensión no tienen sentido como filtro de la otra.
+  const cambiarSegmentador = (s: Segmentador) => {
+    setSegmentador(s);
+    setSegmentoOcultos(new Set());
+  };
+
+  const opcionesSegmento = [...new Set(rows.map((r) => r[segmentador]))].sort(porNombre);
+  const toggleSegmento = (v: string) => setSegmentoOcultos((prev) => {
+    const next = new Set(prev);
+    if (next.has(v)) next.delete(v); else next.add(v);
+    return next;
+  });
 
   useEffect(() => {
     onFiltros(
       <div className="space-y-4">
-        <PeriodoSelect periodo={periodo} onChange={setPeriodo} />
-        <BuscadorTexto valor={busqueda} onChange={setBusqueda} placeholder="Vendedor o cliente…" label="Buscar" />
+        <RangoFechas desde={desde} hasta={hasta} onChange={(d, h) => { setDesde(d); setHasta(h); }} />
+        <BuscadorTexto valor={busqueda} onChange={setBusqueda} placeholder="Cliente…" label="Buscar" />
+        <div>
+          <label className="block text-[10px] uppercase tracking-wide text-white/40 mb-1.5">Segmentador</label>
+          <div className="flex gap-1.5">
+            {(["vendedor", "canal"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => cambiarSegmentador(s)}
+                className={`flex-1 px-2.5 py-1.5 rounded-md text-xs font-medium capitalize transition ${
+                  segmentador === s ? "bg-[#DCBE84] text-[#1c1811]" : "bg-white/5 text-white/75 hover:bg-white/10"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+        <ChipsFiltro
+          label={segmentador === "vendedor" ? "Vendedores" : "Canales"}
+          opciones={opcionesSegmento}
+          ocultos={segmentoOcultos}
+          onToggle={toggleSegmento}
+          onMostrarTodos={() => setSegmentoOcultos(new Set())}
+        />
       </div>
     );
-  }, [periodo, busqueda, onFiltros]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desde, hasta, busqueda, segmentador, segmentoOcultos, onFiltros, opcionesSegmento.join("|")]);
 
   const texto = normalizar(busqueda.trim());
-  const filtradas = texto
-    ? rows.filter((r) => normalizar(r.vendedor).includes(texto) || normalizar(r.cliente).includes(texto))
-    : rows;
+  const filtradas = rows.filter((r) => {
+    if (segmentoOcultos.has(r[segmentador])) return false;
+    if (texto && !normalizar(r.cliente).includes(texto)) return false;
+    return true;
+  });
 
-  const vendedores = new Map<string, FilaCliente[]>();
+  // Ranking de CLIENTES (pedido de Ariel: "solo pondría la info de
+  // clientes") -- se suma a través de Vendedor/Canal, el segmentador es un
+  // filtro previo, no una columna de la tabla final.
+  const porCliente = new Map<string, { cliente: string; cajas: number; cantidad: number; ars: number; descuento: number }>();
   for (const r of filtradas) {
-    if (!vendedores.has(r.vendedor)) vendedores.set(r.vendedor, []);
-    vendedores.get(r.vendedor)!.push(r);
+    const acc = porCliente.get(r.cliente) ?? { cliente: r.cliente, cajas: 0, cantidad: 0, ars: 0, descuento: 0 };
+    acc.cajas += r.cajas;
+    acc.cantidad += r.cantidad;
+    acc.ars += r.ars;
+    acc.descuento += r.descuento;
+    porCliente.set(r.cliente, acc);
   }
-  const grupos = [...vendedores.entries()].map(([vendedor, filas]) => ({
-    vendedor, filas: filas.sort((a, b) => porNombre(a.cliente, b.cliente)),
-    total: filas.reduce((a, f) => ({ cajas: a.cajas + f.cajas, cantidad: a.cantidad + f.cantidad, ars: a.ars + f.ars }), { cajas: 0, cantidad: 0, ars: 0 }),
-  })).sort((a, b) => porNombre(a.vendedor, b.vendedor));
+  const ranking = [...porCliente.values()].sort((a, b) => b.ars - a.ars);
+  const total = ranking.reduce((a, f) => ({ cajas: a.cajas + f.cajas, cantidad: a.cantidad + f.cantidad, ars: a.ars + f.ars, descuento: a.descuento + f.descuento }), { cajas: 0, cantidad: 0, ars: 0, descuento: 0 });
 
   return (
     <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-[#1c1811]">Por Cliente</h3>
-        <p className="text-[11px] text-[#847c68] mt-0.5">Ventas VINOS por vendedor y cliente, Venta Neta en ARS.</p>
+        <p className="text-[11px] text-[#847c68] mt-0.5">Ranking de clientes (ventas VINOS), Venta Neta y Descuento Comercial en ARS. Filtrar por {segmentador} en el sidebar.</p>
       </div>
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
       {loading ? (
@@ -209,37 +331,38 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-[#f7f5f0]">
-                <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Vendedor</th>
+                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">#</th>
                 <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">Cliente</th>
                 <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cajas9l</th>
                 <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cantidad</th>
                 <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
+                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Descuento Comercial</th>
               </tr>
             </thead>
             <tbody>
-              {grupos.length === 0 ? (
-                <tr><td colSpan={5} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
-              ) : grupos.map((g) => (
-                <Fragment key={g.vendedor}>
-                  {g.filas.map((f, i) => (
-                    <tr key={`${g.vendedor}::${f.cliente}`} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
-                      {i === 0 && (
-                        <td rowSpan={g.filas.length} className="py-1.5 px-3 text-[#1c1811] align-top font-medium">{g.vendedor}</td>
-                      )}
+              {ranking.length === 0 ? (
+                <tr><td colSpan={6} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
+              ) : (
+                <>
+                  {ranking.map((f, i) => (
+                    <tr key={f.cliente} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
+                      <td className="py-1.5 px-3 text-right tabular-nums text-[#847c68]">{i + 1}</td>
                       <td className="py-1.5 px-3 text-[#1c1811] border-l border-[#f3efe4]">{f.cliente}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cantidad)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.descuento)}</td>
                     </tr>
                   ))}
                   <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
-                    <td className="py-1.5 px-3 text-[#1c1811]" colSpan={2}>Total {g.vendedor}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(g.total.cajas)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(g.total.cantidad)}</td>
-                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(g.total.ars)}</td>
+                    <td className="py-1.5 px-3" colSpan={2}>Total</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.cajas)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.cantidad)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.ars)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.descuento)}</td>
                   </tr>
-                </Fragment>
-              ))}
+                </>
+              )}
             </tbody>
           </table>
         </div>

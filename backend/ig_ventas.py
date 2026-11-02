@@ -71,6 +71,14 @@ CAMPOS_USADOS = (
     # agregado 2026-10-19 para Sales Performance (snap.py) -> clasificar
     # Colome Hotel / Colome Visitor Center / Cafayate Visitor Center.
     "d_centro_costo",
+    # agregado 2026-11-02 (pedido de Ariel Culasso vía Ezequiel, Otros
+    # Análisis -> Por Cliente): "descuento comercial" por línea. `m_desc_total`
+    # (NO `pc_desc_uno/dos/...`, que son tasas % de escalones de descuento,
+    # muchas veces en 0 aunque sí hubo descuento real aplicado) -- validado
+    # con filas reales: m_desc_total == (precio_unit_mon_loc -
+    # precio_neto_mon_loc) * cantidad, monto en ARS (misma moneda que
+    # valor_mon_loc).
+    "m_desc_total",
 )
 
 
@@ -588,30 +596,41 @@ def _lineas_vinos(desde: date, hasta_incl: date):
 
 def ventas_por_cliente(desde: date, hasta_incl: date) -> list[dict]:
     """Otros Análisis -> Por Cliente (replica de Operaciones_de_Ventas.xlsx,
-    hoja "Por Cliente"). Filas planas Vendedor/Cliente -- el frontend agrupa
-    y sub-totaliza por vendedor. Sin "% Desc C" (pedido explícito de
-    Ezequiel 2026-10-19: se omite, no hay un campo 1 a 1 en ig_ventas y no
-    vale la pena estimarlo sin validar la fórmula con Ariel)."""
-    acc: dict[tuple[str, str], list[float]] = {}
+    hoja "Por Cliente"). Filas planas Vendedor/Canal/Cliente -- el frontend
+    arma el ranking (ordenado por Venta Neta) y segmenta por Vendedor o
+    Canal (pedido de Ariel Culasso vía Ezequiel 2026-11-02, reemplaza el
+    agrupado fijo por Vendedor del diseño anterior).
+
+    "Descuento Comercial" agregado el mismo día (antes "% Desc C" se omitía
+    por pedido explícito de Ezequiel 2026-10-19: "no hay un campo 1 a 1...
+    no vale la pena estimarlo sin validar la fórmula con Ariel" -- Ariel
+    ahora lo pidió directamente, y se encontró el campo real: `m_desc_total`,
+    validado contra `(precio_unit_mon_loc - precio_neto_mon_loc) * cantidad`
+    fila por fila, nunca los `pc_desc_*` que vienen en 0 aunque sí hubo
+    descuento real)."""
+    acc: dict[tuple[str, str, str], list[float]] = {}
     for it in _lineas_vinos(desde, hasta_incl):
         vendedor = it.get("n_vendedor") or "Sin vendedor"
+        canal = it.get("d_canal_venta") or "Sin canal"
         cliente = it.get("n_cliente") or "Sin cliente"
-        a = acc.setdefault((vendedor, cliente), [0.0, 0.0, 0.0, 0.0, 0.0])
+        a = acc.setdefault((vendedor, canal, cliente), [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         cantidad = float(it.get("cantidad") or 0)
         a[0] += float(it.get("cantidad_cajas9l") or 0)
         a[1] += cantidad
         a[2] += float(it.get("valor_mon_loc") or 0)
         a[3] += float(it.get("valor_venta_mon_alt") or 0)
         a[4] += float(it.get("costo_unit_mon_alt") or 0) * cantidad
+        a[5] += float(it.get("m_desc_total") or 0)
     out = []
-    for (vendedor, cliente), (cajas, cantidad, ars, usd, costo_usd) in acc.items():
+    for (vendedor, canal, cliente), (cajas, cantidad, ars, usd, costo_usd, descuento) in acc.items():
         mg_pct = (usd - costo_usd) / usd if usd else 0.0
         out.append({
-            "vendedor": vendedor, "cliente": cliente,
+            "vendedor": vendedor, "canal": canal, "cliente": cliente,
             "cajas": round(cajas, 4), "cantidad": round(cantidad, 2),
-            "ars": round(ars, 2), "mg_pct": round(mg_pct, 6),
+            "ars": round(ars, 2), "descuento": round(descuento, 2),
+            "mg_pct": round(mg_pct, 6),
         })
-    out.sort(key=lambda r: (r["vendedor"], -r["ars"]))
+    out.sort(key=lambda r: -r["ars"])
     return out
 
 

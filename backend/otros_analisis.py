@@ -14,7 +14,13 @@
   "Ventas" del Excel original, confirmado 2026-10-08 en ig_ventas.py).
   Mismo patrón de un-solo-mes que Ctrl AFIP -> Ventas por Jurisdicción
   (jurisdiccion.py): sin cache de agregado histórico, se recalcula por
-  request (barato, es un solo mes de días)."""
+  request (barato, es un solo mes de días).
+
+- Por Cliente rediseñado 2026-11-02 (pedido de Ariel Culasso vía Ezequiel):
+  ranking de clientes (ya no agrupado fijo por Vendedor), rango de fechas
+  LIBRE en vez de un solo mes, y columna "Descuento Comercial" agregada
+  (ver `ventas_por_cliente` en ig_ventas.py). Por SKU/Por Vendedor siguen
+  con el mismo diseño de un-solo-mes."""
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -57,13 +63,22 @@ def _periodo_default() -> str:
 
 @router.get("/por-cliente")
 async def por_cliente(
-    periodo: str | None = Query(None, description="YYYY-MM, filtra un solo mes calendario"),
+    desde: str | None = Query(None, description="YYYY-MM-DD, default: inicio del mes calendario anterior"),
+    hasta: str | None = Query(None, description="YYYY-MM-DD inclusive, default: fin del mes calendario anterior"),
     user=Depends(require_reader),
 ):
-    periodo = periodo or _periodo_default()
-    desde, hasta_incl = _rango_mes(periodo)
-    rows = ventas_por_cliente(desde, hasta_incl)
-    return {"periodo": periodo, "rows": rows}
+    # Rango de fechas LIBRE (pedido de Ariel Culasso vía Ezequiel
+    # 2026-11-02: "el periodo debería permitirme seleccionar un rango de
+    # fech[as]") -- reemplaza el selector de un solo mes calendario que
+    # tenían las 3 vistas desde el 2026-10-19. Por SKU/Por Vendedor NO se
+    # tocan, siguen con `periodo` mensual (Ariel pidió esto solo para Por
+    # Cliente).
+    if desde and hasta:
+        desde_d, hasta_d = date.fromisoformat(desde), date.fromisoformat(hasta)
+    else:
+        desde_d, hasta_d = _rango_mes(_periodo_default())
+    rows = ventas_por_cliente(desde_d, hasta_d)
+    return {"desde": desde_d.isoformat(), "hasta": hasta_d.isoformat(), "rows": rows}
 
 
 @router.get("/por-sku")
