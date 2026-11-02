@@ -710,13 +710,9 @@
   $('view-region').addEventListener('change', e => {
     if (e.target.name === 'mapModo') { mapModo = e.target.value; drawMap(); }
   });
-  document.querySelectorAll('input[name="snapTab"]').forEach(r => {
-    r.addEventListener('change', e => {
-      const fm = e.target.value === 'fdelmotte';
-      $('snapConsolidado').hidden = fm;
-      $('snapFdelMotte').hidden = !fm;
-    });
-  });
+  // El toggle Consolidado/FdelMotte se movió a snap.js (2026-11-02, ver
+  // su comentario) -- acá quedaba atado a la carga LENTA de este script,
+  // "fantasma" real reportado por Ezequiel.
 
   // BLINDAJE 2026-11-02: renderPanel() corre siempre acá, aunque la vista
   // inicial sea Sales Performance -- si algo dentro tira (como pasó con el

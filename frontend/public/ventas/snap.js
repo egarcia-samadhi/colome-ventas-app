@@ -87,7 +87,18 @@ function renderSbl(rows) {
 // `_agregado_fdelmotte` en snap.py -- el total reconcilia exacto en ARS,
 // no en USD). ----------
 function renderFdelmotteTabla(titulo, rows) {
-  let html = `<h4 style="margin:0 0 8px;font-size:13px;font-weight:600;color:var(--ink)">${titulo}</h4><table><thead>
+  // table-layout:fixed + ancho explícito en la 1ra columna (pedido
+  // explícito de Ezequiel 2026-11-02: "fijate que por variedad y por
+  // canal queden alineadas sus columnas") -- sin esto cada tabla
+  // autoajusta el ancho de su columna de etiqueta según el texto más
+  // largo QUE ELLA TIENE (las variedades son más largas que los
+  // canales), así que las columnas de datos de ambas tablas no quedaban
+  // una debajo de la otra. Mismo ancho fijo en las 2 tablas -> alineadas
+  // siempre, sin importar qué tan largo sea el texto de cada una.
+  let html = `<h4 style="margin:0 0 8px;font-size:13px;font-weight:600;color:var(--ink)">${titulo}</h4><table style="table-layout:fixed;width:100%"><colgroup>
+    <col style="width:260px">
+    <col><col><col><col style="width:28px"><col><col><col>
+  </colgroup><thead>
     <tr class="grp">
       <th></th>
       <th class="grp" colspan="3">Sales Value (ARS 000s)</th>
@@ -298,6 +309,27 @@ const snapInstances = [
   crearSnapInstance({ dataElId: 'colome-data', rootElId: 'snapConsolidado', qs: '' }),
   crearSnapInstance({ dataElId: 'colome-data-fm', rootElId: 'snapFdelMotte', qs: 'fdelmotte=1', esFdelMotte: true }),
 ].filter(Boolean);
+
+// Toggle Consolidado/FdelMotte -- MOVIDO ACÁ desde app.js (2026-11-02,
+// bug real reportado por Ezequiel: "hay un cierto fantasma en la
+// pestaña familia del monte, me costo que lo muestre, me mostraba
+// primero... el sales performance consolidado"). Causa: al entrar
+// directo a Sales Performance (hash #snap o sin hash), page.tsx carga
+// snap.js rápido (Etapa 1) pero app.js recién en segundo plano (Etapa 2,
+// tarda varios segundos -- app.js es para Panel de Ventas/Región, no
+// tiene nada que ver con este toggle). El listener vivía en app.js, así
+// que clickear "FdelMotte" ANTES de que app.js terminara de cargar no
+// hacía nada -- el radio se tildaba (estado nativo del navegador) pero
+// el div no cambiaba, "pareciendo" que seguía mostrando Consolidado.
+// Acá, en snap.js, el listener queda disponible desde el primer momento
+// en que la pantalla es usable.
+document.querySelectorAll('input[name="snapTab"]').forEach(r => {
+  r.addEventListener('change', e => {
+    const fm = e.target.value === 'fdelmotte';
+    document.getElementById('snapConsolidado').hidden = fm;
+    document.getElementById('snapFdelMotte').hidden = !fm;
+  });
+});
 
 // ---------- Selector de mes en el sidebar (pedido explícito de Ezequiel
 // 2026-10-19: "en el sidebar tiene que decir qué mes querés ver... en el
