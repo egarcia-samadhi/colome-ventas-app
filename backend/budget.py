@@ -69,8 +69,61 @@ MERCADO_A_LINEA = {
     "México": "Grupo Colome Export",
 }
 
+# Mercado -> ZONA (2026-11-03, mismo día, pedido de Ezequiel de encolumnar
+# Ventas por Región igual que "Sales by Market" del SNAP real): mismos 17
+# valores crudos de `budget_detalle.mercado` que `MERCADO_A_LINEA` arriba,
+# pero clasificados a zona (`region_agrupante_mapa`/`pais_zona_mapa`, ver
+# datos_maestros.py) en vez de línea de negocio -- NO hay granularidad de
+# Budget por país individual (confirmado: el Budget real agrupa en baldes
+# gruesos UE/Asia/Caribe/Resto L.A., no Alemania/Francia sueltos), así que
+# la tabla de Sales by Market usa el mismo nivel de zona que ya existe en
+# Datos Maestros -> Agrupante de Región, no una granularidad que el Budget
+# no puede poblar.
+MERCADO_A_ZONA = {
+    "Distrib. Bs. As.": "BUENOS AIRES",
+    "Interior": "INTERIOR",
+    "Distrib. NOA": "NOA",
+    "HCVC - Hotel": "DTC",
+    "HCVC - VC Col": "DTC",
+    "HCVC - VC Cafa": "DTC",
+    "E-commerce": "DTC",
+    "USA": "UNITED STATES",
+    "Canadá": "CANADA",
+    "México": "CARIBBEAN",
+    "Caribe": "CARIBBEAN",
+    "Brasil": "LATIN AMERICA",
+    "Resto L.A.": "LATIN AMERICA",
+    "Suiza": "EUROPE",
+    "UE": "EUROPE",
+    "Reino Unido": "UK",
+    "Asia": "ASIA",
+}
+
 _budget_cache: dict[str, list[float]] | None = None
 _budget_linea_cache: dict[str, dict[str, list[float]]] | None = None
+_budget_zona_cache: dict[str, dict[str, list[float]]] | None = None
+
+
+def get_budget_mercado_mensual() -> dict[str, dict[str, list[float]]]:
+    """{periodo: {zona: [usd, cajas]}} -- mismo criterio que
+    `get_budget_linea_mensual()` pero clasificado por `MERCADO_A_ZONA` en
+    vez de `MERCADO_A_LINEA`. Consumido por `snap.py::_agregado_mercado_budget()`
+    (Budget de Sales by Market / Ventas por Región)."""
+    global _budget_zona_cache
+    if _budget_zona_cache is None:
+        conn = get_db()
+        rows = conn.execute("SELECT periodo, mercado, cajas, usd FROM budget_detalle").fetchall()
+        conn.close()
+        out: dict[str, dict[str, list[float]]] = {}
+        for r in rows:
+            zona = MERCADO_A_ZONA.get(r["mercado"])
+            if zona is None:
+                continue
+            a = out.setdefault(r["periodo"], {}).setdefault(zona, [0.0, 0.0])
+            a[0] += r["usd"]
+            a[1] += r["cajas"]
+        _budget_zona_cache = out
+    return _budget_zona_cache
 
 
 def _agregar_desde_detalle() -> tuple[dict[str, list[float]], dict[str, dict[str, list[float]]]]:
@@ -113,9 +166,10 @@ def get_budget_linea_mensual() -> dict[str, dict[str, list[float]]]:
 
 
 def _invalidar_cache() -> None:
-    global _budget_cache, _budget_linea_cache
+    global _budget_cache, _budget_linea_cache, _budget_zona_cache
     _budget_cache = None
     _budget_linea_cache = None
+    _budget_zona_cache = None
     from snap import limpiar_snap_cache
     limpiar_snap_cache()
 

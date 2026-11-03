@@ -43,31 +43,18 @@
         <div id="pvBody"></div>
       </div>
 
-      <!-- ================= Ventas por Región ================= -->
+      <!-- ================= Ventas por Región -> Sales by Market (2026-11-03, reemplaza el mapa/árbol anterior) ================= -->
       <div id="view-region" class="view" hidden>
-        <div class="bar-top">
-          <span class="pill">Ejercicio Fiscal - 2026-2027</span>
-          <span class="hint" style="margin:0">Región = Zona Comercial de Redline. Los filtros del panel lateral aplican a la tabla y al mapa.</span>
-        </div>
-        <div class="card">
-          <div class="card-head">
-            <h3>Región → País → Cliente</h3>
-            <div style="display:flex;gap:8px">
-              <button class="btn" id="rgToggle">▼ Expandir todo</button>
-            </div>
+        <div id="rgMercado">
+          <div class="seg period-toggle" role="radiogroup" aria-label="Período" style="margin-bottom:14px">
+            <button type="button" data-period="mes" class="active">Monthly</button>
+            <button type="button" data-period="ytd">YTD</button>
           </div>
-          <div class="scroll-x" style="border:1px solid var(--line)"><div id="rgTable"></div></div>
-        </div>
-        <div class="card">
-          <div class="card-head">
-            <h3 id="mapTitle">Mapa Mundial — Ventas por País</h3>
-            <div class="seg" role="radiogroup" aria-label="Nivel del mapa">
-              <label><input type="radio" name="mapModo" value="pais" checked> Por país</label>
-              <label><input type="radio" name="mapModo" value="prov"> Argentina por provincia</label>
-            </div>
-          </div>
-          <div id="mapBox">Cargando mapa…</div>
-          <div class="hint" id="mapNote"></div>
+          <section class="panel">
+            <h2>Sales by Market</h2>
+            <div class="panel-sub">Valores de venta en USD (000s) y equivalente 9 litros. Actual vs. Last Year vs. Budget — misma zona que Datos Maestros → Agrupante de Región / País → Región.</div>
+            <div class="sbl-table-mount"></div>
+          </section>
         </div>
       </div>
 

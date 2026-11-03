@@ -64,6 +64,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from datos_maestros import get_pais_zona_map
 from ig_ventas import CACHE_DIR, _lineas_vinos
 
 router = APIRouter(prefix="/api/ventas", tags=["snap"])
@@ -122,6 +123,15 @@ def _ventas_sbl_cached(desde: date, hasta_incl: date) -> list[dict | None]:
     key = f"{desde.isoformat()}_{hasta_incl.isoformat()}_sbl"
     if key not in cache:
         cache[key] = ventas_sbl(desde, hasta_incl)
+        _guardar_snap_cache()
+    return cache[key]
+
+
+def _ventas_mercado_cached(desde: date, hasta_incl: date) -> list[dict | None]:
+    cache = _cargar_snap_cache()
+    key = f"{desde.isoformat()}_{hasta_incl.isoformat()}_mercado"
+    if key not in cache:
+        cache[key] = ventas_mercado(desde, hasta_incl)
         _guardar_snap_cache()
     return cache[key]
 
@@ -238,6 +248,7 @@ from budget import get_budget_mensual as _budget_mensual
 # MIGRADO a DB 2026-11-03, mismo criterio que `_budget_mensual` arriba --
 # lee `budget.get_budget_linea_mensual()` en vez del JSON directo.
 from budget import get_budget_linea_mensual as _budget_linea_mensual
+from budget import get_budget_mercado_mensual
 
 
 def _agregado_budget_linea(desde: date, hasta_incl: date) -> dict[str, list[float]] | None:
@@ -858,6 +869,141 @@ def combos_sin_clasificar(desde: date, hasta_incl: date) -> list[dict]:
     return out
 
 
+# ---------- Sales by Market / Ventas por Región (2026-11-03) ----------
+# Pedido explícito de Ezequiel: "necesitan que la info de ventas por
+# region, se vea encolumnada igual que el snap en la hoja sales by
+# market" (`SNAP I September 2026 - NM - VSP.xls`) -- reemplaza el mapa
+# de Ventas por Región por una tabla encolumnada Actual/Budget/Last Year,
+# mismo patrón visual y de datos que Sales by Line of Business.
+#
+# Granularidad: el SNAP real tiene 2 hojas de detalle distinto -- "Sales
+# by Market" (buckets gruesos: DBA/Interior/NOA/AirLines/DTC + países de
+# exportación agrupados en Total Caribbean/Latin America/Europe/Asia
+# Pacific) y "Sales by Market_D" (país por país, Alemania/Francia/Holanda
+# sueltos). Se usa el criterio de la hoja GRUESA -- confirmado con
+# Ezequiel al mostrarle que el Budget real (`budget_detalle.mercado`) NO
+# tiene granularidad por país individual, solo baldes (UE/Asia/Caribe/
+# Resto L.A. + USA/Canadá/México/Brasil/Suiza/Reino Unido sueltos) --
+# "si ya tenemos un ventas por region, y cada region esta asociada en
+# datos maestros, cual es el problema?": se usa EXACTO el mismo nivel de
+# zona que ya expone Datos Maestros -> Agrupante de Región / País → Región
+# (11 valores: DTC, BUENOS AIRES, NOA, INTERIOR, UK, EUROPE, CARIBBEAN,
+# UNITED STATES, LATIN AMERICA, CANADA, ASIA), para que Budget/Actual/LY
+# usen la MISMA clasificación que el resto de la app (nunca "fuentes
+# distintas", mismo criterio que Sales by Line of Business).
+ZONA_DOMESTIC = [
+    ("DBA", "BUENOS AIRES"),
+    ("Interior", "INTERIOR"),
+    ("Northern Region - NOA", "NOA"),
+    ("Direct-to-consumer Channel", "DTC"),
+]
+ZONA_EXPORT = [
+    ("United States", "UNITED STATES"),
+    ("Canada", "CANADA"),
+    ("Total Caribbean", "CARIBBEAN"),
+    ("Total Latin America", "LATIN AMERICA"),
+    ("Europe", "EUROPE"),
+    ("UK and Ireland", "UK"),
+    ("Asia Pacific and Middle East", "ASIA"),
+]
+
+
+def _agregado_mercado(desde: date, hasta_incl: date) -> dict[str, list[float]]:
+    """{zona: [usd, cajas, costo_usd]} -- mismo generador `_lineas_vinos`
+    que el resto de la app (Panel de Ventas/Otros Análisis/SBL, nunca un
+    pipeline aparte). `zona` sale de `d_zona_comercial` crudo para
+    Argentina (doméstico -- Argentina nunca tiene override, ver
+    `pais_zona_mapa`) y del override País → Región para el resto
+    (`get_pais_zona_map()`, MISMA fuente que usa `facts_panel_ventas()`
+    para Panel de Ventas -- si Ariel corrige un país en Datos Maestros,
+    esta tabla se actualiza sola, sin tocar código)."""
+    mapa_pais_zona = get_pais_zona_map()
+    acc: dict[str, list[float]] = {}
+    for it in _lineas_vinos(desde, hasta_incl):
+        pais = (it.get("d_pais") or "").strip()
+        zona_cruda = (it.get("d_zona_comercial") or "Sin región").strip()
+        zona = mapa_pais_zona.get(pais, zona_cruda)
+        usd = float(it.get("valor_venta_mon_alt") or 0)
+        cajas = float(it.get("cantidad_cajas9l") or 0)
+        costo = float(it.get("costo_unit_mon_alt") or 0) * float(it.get("cantidad") or 0)
+        # mismo guard de costo corrupto que `_agregado_sbl` (ver su
+        # comentario) -- sin esto un costo unitario corrupto en origen
+        # puede romper el %MG a valores sin sentido.
+        if (usd and costo > usd * 10) or costo > 500.0:
+            costo = 0.0
+        a = acc.setdefault(zona, [0.0, 0.0, 0.0])
+        a[0] += usd
+        a[1] += cajas
+        a[2] += costo
+    return acc
+
+
+def _agregado_mercado_budget(desde: date, hasta_incl: date) -> dict[str, list[float]] | None:
+    """Suma Budget por zona para [desde, hasta_incl] -- `None` si falta la
+    fixture de ALGUNO de los meses del rango (mismo criterio que
+    `_agregado_budget_linea`)."""
+    budget = get_budget_mercado_mensual()
+    acc: dict[str, list[float]] = {}
+    for anio, mes in _meses_en_rango(desde, hasta_incl):
+        periodo = f"{anio:04d}-{mes:02d}"
+        mes_data = budget.get(periodo)
+        if mes_data is None:
+            return None
+        for zona, v in mes_data.items():
+            a = acc.setdefault(zona, [0.0, 0.0])
+            a[0] += v[0]
+            a[1] += v[1]
+    return acc
+
+
+def _fila_zona(display_label: str, zona_key: str, agg: dict[str, list[float]],
+                ly: dict[str, list[float]] | None, bud: dict[str, list[float]] | None) -> dict:
+    """`_fila()` busca en `agg`/`bud` por el mismo string que expone como
+    `label` -- acá el nombre a mostrar (ej. "DBA") y la clave real de
+    `agg`/`bud` (la zona cruda, ej. "BUENOS AIRES") son distintos, así
+    que se arma con la clave real y se renombra el label después."""
+    out = _fila(zona_key, agg, ly, bud=bud)
+    out["label"] = display_label
+    return out
+
+
+def ventas_mercado(desde: date, hasta_incl: date) -> list[dict | None]:
+    """Filas de Sales by Market (Ventas por Región encolumnada) para
+    [desde, hasta_incl]. LY = mismo rango corrido 1 año atrás -- NO hay
+    fixture LFY a nivel de mercado (la fixture jul-ago 2025 solo tiene
+    línea de negocio, ver `_lfy_agregado`), así que LY queda `None`
+    ("n/d") para cualquier parte del rango anterior a `DESDE_HISTORICO`,
+    mismo criterio ya usado para FdelMotte (sin fixture equivalente)."""
+    agg = _agregado_mercado(desde, hasta_incl)
+    desde_ly = date(desde.year - 1, desde.month, desde.day)
+    hasta_ly = date(hasta_incl.year - 1, hasta_incl.month, hasta_incl.day)
+    ly = _agregado_mercado(desde_ly, hasta_ly) if desde_ly >= DESDE_HISTORICO else None
+    bud = _agregado_mercado_budget(desde, hasta_incl)
+
+    domestic_rows = [_fila_zona(label, zona, agg, ly, bud) for label, zona in ZONA_DOMESTIC]
+    airlines = _cero("AirLines")
+    total_domestic = _sumar("Total Domestic", domestic_rows)
+
+    export_rows = [_fila_zona(label, zona, agg, ly, bud) for label, zona in ZONA_EXPORT]
+    total_export = _sumar("Total Export", export_rows)
+
+    total_branded = _sumar("Total Branded Wine", [total_domestic, total_export])
+    bob_total = _cero("Total Buyers Own Brand")
+    total = _sumar("TOTAL", [total_branded, bob_total])
+
+    return [
+        *domestic_rows[:3], airlines, domestic_rows[3], total_domestic,
+        None,
+        *export_rows, total_export,
+        None,
+        total_branded,
+        None,
+        bob_total,
+        None,
+        total,
+    ]
+
+
 DESDE_HISTORICO = date(2025, 9, 1)  # mismo arranque del histórico real que panel_ventas.py/otros_analisis.py/auditoria.py
 
 
@@ -1000,4 +1146,9 @@ async def snap(mes: str | None = None, fdelmotte: bool = False, user=Depends(req
         base["sbl_mes"] = _ventas_sbl_cached(desde_mes, hasta_mes)
         base["sbl_ytd"] = _ventas_sbl_cached(desde_ytd, hasta_mes)
         base["ly_mensual"] = _ly_mensual()
+        # Sales by Market / Ventas por Región (2026-11-03) -- mismo
+        # selector de mes/YTD que Sales by Line of Business, exclusivo de
+        # Colomé (no FdelMotte, mismo alcance que ly_mensual arriba).
+        base["mercado_mes"] = _ventas_mercado_cached(desde_mes, hasta_mes)
+        base["mercado_ytd"] = _ventas_mercado_cached(desde_ytd, hasta_mes)
     return base

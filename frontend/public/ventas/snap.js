@@ -31,7 +31,9 @@ function td(content, cls) {
 // 2026-11-02 -- misma fuente que el Budget TOTAL de Panel de Ventas
 // (Budget_Dinamico.xlsx clasificado por línea, ver snap.py), cubre los 12
 // meses del ejercicio 2026-2027.) ----------
-const SBL_TOTAL_ROWS = new Set(['TOTAL SALES TO THIRD PARTIES', 'TOTAL SALES', 'Total Grupo Colome Brand', 'Total Buyers Own Brand (BOB)', 'Total Intercompany Sales', 'Direct-to-consumer Channel']);
+const SBL_TOTAL_ROWS = new Set(['TOTAL SALES TO THIRD PARTIES', 'TOTAL SALES', 'Total Grupo Colome Brand', 'Total Buyers Own Brand (BOB)', 'Total Intercompany Sales', 'Direct-to-consumer Channel',
+  // Sales by Market (2026-11-03)
+  'Total Domestic', 'Total Export', 'Total Branded Wine', 'Total Buyers Own Brand', 'TOTAL']);
 
 function renderSbl(rows) {
   let html = `<table><thead>
@@ -158,7 +160,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarModa
 // render aparte (gráficos de barras sin comparativo LY, en app.js) --
 // ver backend/snap.py para el `fdelmotte=1` que distingue el universo de
 // filas en el backend. ----------
-function crearSnapInstance({ dataElId, rootElId, qs, esFdelMotte }) {
+function crearSnapInstance({ dataElId, rootElId, qs, esFdelMotte, esMercado }) {
   const root = document.getElementById(rootElId);
   if (!root) return null;
   let RAW = JSON.parse(document.getElementById(dataElId).textContent);
@@ -168,6 +170,10 @@ function crearSnapInstance({ dataElId, rootElId, qs, esFdelMotte }) {
   let periodoActivo = 'mes';
 
   function renderStats(period) {
+    // Sales by Market / Ventas por Región (2026-11-03) -- sin tarjetas de
+    // stat arriba (la fila TOTAL de la tabla ya resume lo mismo), esta
+    // instancia no tiene `.stat-row` en el DOM (ver content.html).
+    if (esMercado) return;
     if (esFdelMotte) {
       const rows = period === 'mes' ? RAW.fdelmotte_canal_mes : RAW.fdelmotte_canal_ytd;
       const total = rows.find(r => r.label === 'Grand total');
@@ -200,6 +206,15 @@ function crearSnapInstance({ dataElId, rootElId, qs, esFdelMotte }) {
       const variedad = period === 'mes' ? RAW.fdelmotte_variedad_mes : RAW.fdelmotte_variedad_ytd;
       const canal = period === 'mes' ? RAW.fdelmotte_canal_mes : RAW.fdelmotte_canal_ytd;
       sblTableEl.innerHTML = renderFdelmotte(variedad, canal);
+      return;
+    }
+    // Sales by Market (2026-11-03, pedido explícito de Ezequiel: "la info
+    // de ventas por region, se vea encolumnada igual que el snap en la
+    // hoja sales by market") -- reusa renderSbl() tal cual, las filas de
+    // `ventas_mercado()` (snap.py) tienen el MISMO shape que las de SBL
+    // (label/usd_act/usd_ly/usd_bud/lit_.../gm_act).
+    if (esMercado) {
+      sblTableEl.innerHTML = renderSbl(period === 'mes' ? RAW.mercado_mes : RAW.mercado_ytd);
       return;
     }
     sblTableEl.innerHTML = renderSbl(period === 'mes' ? RAW.sbl_mes : RAW.sbl_ytd);
@@ -308,6 +323,12 @@ function crearSnapInstance({ dataElId, rootElId, qs, esFdelMotte }) {
 const snapInstances = [
   crearSnapInstance({ dataElId: 'colome-data', rootElId: 'snapConsolidado', qs: '' }),
   crearSnapInstance({ dataElId: 'colome-data-fm', rootElId: 'snapFdelMotte', qs: 'fdelmotte=1', esFdelMotte: true }),
+  // Sales by Market / Ventas por Región (2026-11-03) -- reusa el MISMO
+  // colome-data que Consolidado (mercado_mes/mercado_ytd viajan en el
+  // mismo /api/ventas/snap, ver snap.py), así que cambiar el mes en el
+  // selector de Sales Performance refetchea esta instancia también
+  // (está en este mismo array).
+  crearSnapInstance({ dataElId: 'colome-data', rootElId: 'rgMercado', qs: '', esMercado: true }),
 ].filter(Boolean);
 
 // Toggle Consolidado/FdelMotte -- MOVIDO ACÁ desde app.js (2026-11-02,
