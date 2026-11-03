@@ -678,7 +678,7 @@ def ventas_por_sku(desde: date, hasta_incl: date) -> list[dict]:
 def ventas_por_vendedor(desde: date, hasta_incl: date) -> list[dict]:
     """Otros Análisis -> Por Vendedor (replica de Operaciones_de_Ventas.xlsx,
     hoja "Por vendedor"): filas Rubro/Artículo, columna pivot = Vendedor,
-    métricas Cantidad, Venta Neta (ARS), Descuento Comercial y %MG. Filas
+    métricas Cajas9l, Venta Neta (ARS), Descuento Comercial y %MG. Filas
     planas, el frontend pivotea vendedor a columna y sub-totaliza por rubro.
 
     `periodo` (YYYY-MM) agregado a la clave 2026-11-02 (pedido de Ariel
@@ -688,7 +688,16 @@ def ventas_por_vendedor(desde: date, hasta_incl: date) -> list[dict]:
     período, pero el frontend puede reagrupar por `periodo` para el
     drill-down de tendencia de un vendedor puntual, sin pedir un endpoint
     aparte. `descuento` = `m_desc_total` (mismo campo que Por Cliente/SKU,
-    ver docstring de `ventas_por_cliente`)."""
+    ver docstring de `ventas_por_cliente`).
+
+    `cajas` agregado 2026-11-03 (pedido explícito de Ezequiel: "sigue sin
+    reemplazar cant. por caja de 9" -- la columna "Cant." de esta vista
+    mostraba `cantidad`, unidades sueltas, NO comparable entre productos
+    de distinto formato de botella; mismo motivo por el que el drill-down
+    de este mismo día pasó a usar Cajas9l en vez de Cantidad, ver
+    `ventas_cliente_por_marca_producto`). `cantidad` se deja en la
+    respuesta por compatibilidad (nadie más la consume hoy), pero el
+    frontend ya no la muestra."""
     acc: dict[tuple[str, str, str, str, str], list[float]] = {}
     for it in _lineas_vinos(desde, hasta_incl):
         k = (
@@ -698,19 +707,21 @@ def ventas_por_vendedor(desde: date, hasta_incl: date) -> list[dict]:
             it.get("n_vendedor") or "Sin vendedor",
             it.get("periodo") or "",
         )
-        a = acc.setdefault(k, [0.0, 0.0, 0.0, 0.0, 0.0])
+        a = acc.setdefault(k, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         cantidad = float(it.get("cantidad") or 0)
         a[0] += cantidad
-        a[1] += float(it.get("valor_mon_loc") or 0)
-        a[2] += float(it.get("valor_venta_mon_alt") or 0)
-        a[3] += float(it.get("costo_unit_mon_alt") or 0) * cantidad
-        a[4] += float(it.get("m_desc_total") or 0)
+        a[1] += float(it.get("cantidad_cajas9l") or 0)
+        a[2] += float(it.get("valor_mon_loc") or 0)
+        a[3] += float(it.get("valor_venta_mon_alt") or 0)
+        a[4] += float(it.get("costo_unit_mon_alt") or 0) * cantidad
+        a[5] += float(it.get("m_desc_total") or 0)
     out = []
-    for (rubro, c_articulo, d_articulo, vendedor, periodo), (cantidad, ars, usd, costo_usd, descuento) in acc.items():
+    for (rubro, c_articulo, d_articulo, vendedor, periodo), (cantidad, cajas, ars, usd, costo_usd, descuento) in acc.items():
         mg_pct = (usd - costo_usd) / usd if usd else 0.0
         out.append({
             "rubro": rubro, "c_articulo": c_articulo, "d_articulo": d_articulo,
             "vendedor": vendedor, "periodo": periodo, "cantidad": round(cantidad, 2),
+            "cajas": round(cajas, 4),
             "ars": round(ars, 2), "descuento": round(descuento, 2),
             "mg_pct": round(mg_pct, 6),
         })

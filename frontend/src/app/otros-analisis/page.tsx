@@ -64,7 +64,7 @@ import { AppShell } from "@/components/AppShell";
 
 interface FilaCliente { vendedor: string; canal: string; cliente: string; cajas: number; cantidad: number; ars: number; descuento: number; mg_pct: number }
 interface FilaSku { rubro: string; c_articulo: string; d_articulo: string; oficina: string; cajas: number; cantidad: number; ars: number; descuento: number; mg_pct: number }
-interface FilaVendedor { rubro: string; c_articulo: string; d_articulo: string; vendedor: string; periodo: string; cantidad: number; ars: number; descuento: number; mg_pct: number }
+interface FilaVendedor { rubro: string; c_articulo: string; d_articulo: string; vendedor: string; periodo: string; cantidad: number; cajas: number; ars: number; descuento: number; mg_pct: number }
 
 const fmtNum = (n: number) =>
   n === 0 ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -816,7 +816,12 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
 // sub-columnas parecían ambiguas con varios vendedores tildados a la vez,
 // pero no lo son: cada una ordena SU PROPIO vendedor, sin afectar al
 // resto -- fila sin esa métrica para ese vendedor cuenta como 0).
-type MetricaVendedor = "cantidad" | "ars" | "descuento";
+// "Cant." (cantidad, unidades sueltas) reemplazada por "Caja de 9"
+// (cajas9l, ya normalizada) el 2026-11-03 -- mismo motivo que el fix del
+// drill-down ese mismo día (ver `ventas_por_vendedor` en ig_ventas.py):
+// unidades sueltas no son comparables entre productos de distinto
+// formato de botella.
+type MetricaVendedor = "cajas" | "ars" | "descuento";
 type ColVendedor = "rubro" | "d_articulo" | "totalArs" | `v:${string}:${MetricaVendedor}`;
 const colVendedor = (vendedor: string, metrica: MetricaVendedor): ColVendedor => `v:${vendedor}:${metrica}`;
 
@@ -867,15 +872,15 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
 
   const vendedores = [...new Set(filtradas.map((r) => r.vendedor))].sort(porNombre);
 
-  const rubros = new Map<string, Map<string, { d_articulo: string; porVendedor: Map<string, { cantidad: number; ars: number; descuento: number }> }>>();
+  const rubros = new Map<string, Map<string, { d_articulo: string; porVendedor: Map<string, { cajas: number; ars: number; descuento: number }> }>>();
   for (const r of filtradas) {
     if (!rubros.has(r.rubro)) rubros.set(r.rubro, new Map());
     const arts = rubros.get(r.rubro)!;
     const key = `${r.c_articulo}::${r.d_articulo}`;
     if (!arts.has(key)) arts.set(key, { d_articulo: r.d_articulo, porVendedor: new Map() });
-    const prev = arts.get(key)!.porVendedor.get(r.vendedor) ?? { cantidad: 0, ars: 0, descuento: 0 };
+    const prev = arts.get(key)!.porVendedor.get(r.vendedor) ?? { cajas: 0, ars: 0, descuento: 0 };
     arts.get(key)!.porVendedor.set(r.vendedor, {
-      cantidad: prev.cantidad + r.cantidad, ars: prev.ars + r.ars, descuento: prev.descuento + r.descuento,
+      cajas: prev.cajas + r.cajas, ars: prev.ars + r.ars, descuento: prev.descuento + r.descuento,
     });
   }
 
@@ -907,11 +912,11 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
       // sumen" -- la fila de total dejaba las celdas de Cant./Desc. Com.
       // por vendedor vacías, solo mostraba el total general de la
       // derecha).
-      const totalPorVendedor = new Map<string, { cantidad: number; ars: number; descuento: number }>();
+      const totalPorVendedor = new Map<string, { cajas: number; ars: number; descuento: number }>();
       for (const f of filas) {
         for (const [v, val] of f.porVendedor) {
-          const acc = totalPorVendedor.get(v) ?? { cantidad: 0, ars: 0, descuento: 0 };
-          acc.cantidad += val.cantidad; acc.ars += val.ars; acc.descuento += val.descuento;
+          const acc = totalPorVendedor.get(v) ?? { cajas: 0, ars: 0, descuento: 0 };
+          acc.cajas += val.cajas; acc.ars += val.ars; acc.descuento += val.descuento;
           totalPorVendedor.set(v, acc);
         }
       }
@@ -938,7 +943,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
       <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-[#1c1811]">Por Vendedor</h3>
-          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad, Descuento Comercial y Venta Neta (ARS) por artículo, separado por vendedor. Vista acumulada del rango. Click en una Venta Neta para ver su desglose por Cliente.</p>
+          <p className="text-[11px] text-[#847c68] mt-0.5">Caja de 9, Descuento Comercial y Venta Neta (ARS) por artículo, separado por vendedor. Vista acumulada del rango. Click en una Venta Neta para ver su desglose por Cliente.</p>
         </div>
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
         {loading ? (
@@ -958,7 +963,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                 <tr className="bg-[#f7f5f0]">
                   {vendedores.map((v) => (
                     <Fragment key={v}>
-                      <SortTh label="Cant." col={colVendedor(v, "cantidad")} sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68] border-l border-[#ece6d8]" />
+                      <SortTh label="Caja de 9" col={colVendedor(v, "cajas")} sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68] border-l border-[#ece6d8]" />
                       <SortTh label="Venta Neta" col={colVendedor(v, "ars")} sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68]" />
                       <SortTh label="Desc. Com." col={colVendedor(v, "descuento")} sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68]" />
                       <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] whitespace-nowrap">% Desc.</th>
@@ -982,7 +987,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                           const val = f.porVendedor.get(v);
                           return (
                             <Fragment key={v}>
-                              <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{val ? fmtNum(val.cantidad) : "—"}</td>
+                              <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#f3efe4]">{val ? fmtCajas(val.cajas) : "—"}</td>
                               <td className="py-1.5 px-3 text-right tabular-nums">
                                 {val ? (
                                   <button onClick={() => setComposicion({ c_articulo: f.c_articulo, d_articulo: f.d_articulo, vendedor: v })} className="hover:text-[#7D4E5B] hover:underline">{fmtNum(val.ars)}</button>
@@ -1002,7 +1007,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                         const val = g.totalPorVendedor.get(v);
                         return (
                           <Fragment key={v}>
-                            <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{val ? fmtNum(val.cantidad) : "—"}</td>
+                            <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{val ? fmtCajas(val.cajas) : "—"}</td>
                             <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.ars) : "—"}</td>
                             <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.descuento) : "—"}</td>
                             <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtPct(val.descuento, val.ars) : "—"}</td>
