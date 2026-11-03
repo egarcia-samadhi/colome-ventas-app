@@ -1036,15 +1036,36 @@ Verificado en vivo: tras el fix, `/api/controles` → `{"ok": false,
 en pantalla como fila naranja. Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_cruce_afip_mes_pendiente`.
 
-**Pendientes relacionados, del mismo pedido de Ezequiel (NO
-implementados, diagnosticados solamente -- ver memoria de Claude
-`proyecto_colome_ventas_pendientes_controles_budget_region` antes de
-arrancar cualquiera):**
-- "Región" (`zona` = `d_zona_comercial` crudo) no tiene agrupante en
-  Datos Maestros, a diferencia de Canal/Marca.
-- Ventas por Región (el mapa) no muestra LY -- recomendación dada:
-  agregarlo como una 4ta vista "Por Región" en Otros Análisis en vez de
-  al mapa, para no complicar la lectura geográfica.
+**Pendiente relacionado, del mismo pedido de Ezequiel (NO
+implementado, diagnosticado solamente -- ver memoria de Claude
+`proyecto_colome_ventas_pendientes_controles_budget_region`):**
+Ventas por Región (el mapa) no muestra LY -- recomendación dada:
+agregarlo como una 4ta vista "Por Región" en Otros Análisis en vez de
+al mapa, para no complicar la lectura geográfica.
+
+## Panel de Ventas: filtro previo "Agrupante de Región" (agregado 2026-11-03)
+
+Pedido explícito de Ezequiel: *"las regiones no estan diagramadas y
+configuradas mediante datos maestros"*. "Región" era `zona` =
+`d_zona_comercial` crudo de Redline, sin ningún mapeo -- mismo problema
+que tenían Canal y Marca antes de sus agrupantes. Relevados en vivo los
+11 valores reales (`DTC, BUENOS AIRES, NOA, INTERIOR, UK, EUROPE,
+CARIBBEAN, UNITED STATES, LATIN AMERICA, CANADA, ASIA`), agrupados en
+Doméstico/Exportación (confirmado por Ezequiel, mismo criterio que ya
+usan Budget/SNAP, Grupo Colome Domestic/Export).
+
+- **Backend:** `region_agrupante_mapa` (`database.py`) -- mismo patrón
+  que `canal_agrupante_mapa`/`marca_agrupante_mapa`. CRUD en
+  `datos_maestros.py` (`/api/datos-maestros/region-agrupante`).
+  `panel_ventas.py` agrega `dims["zona_agrupante"]`, paralelo a
+  `dims["zona"]`.
+- **Frontend:** `app.js` agrega sección "Agrupante de Región" en el
+  sidebar, arriba de "Región" -- mismo mecanismo de chips que Canal/
+  Marca. `datos-maestros/page.tsx` gana una 5ta pestaña (`?tab=region`).
+
+Verificado en vivo: tildar "Doméstico" tildó automáticamente Buenos
+Aires + DTC y filtró el total a $1.489.633. Detalle completo en
+memoria de Claude, `proyecto_colome_ventas_agrupante_region`.
 
 ## Budget: pantalla editable real (agregado 2026-11-03)
 
