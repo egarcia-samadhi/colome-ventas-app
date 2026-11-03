@@ -209,6 +209,21 @@ Verificado en vivo y contra el backend directo (`docker exec`): click en un clie
   cualquier usuario lo pida. Detalle completo en memoria de Claude
   `proyecto_colome_ventas_otros_analisis`.
 
+### Columna "% Descuento" en las 4 tablas con Descuento Comercial (agregado 2026-11-03)
+
+Pedido explícito de Ezequiel: *"en otros analisis, en todas las tablas que
+pusimos descuento comercial, debemos agregar una columna con el % de
+descuento"*. `ars` (venta neta, `valor_mon_loc`) ya viene DESPUÉS de
+aplicar el descuento -- venta bruta = `ars + descuento`, `%Desc =
+descuento / (ars + descuento)`. Helper `fmtPct(descuento, ars)` en
+`otros-analisis/page.tsx`, 100% frontend (no se tocó `ig_ventas.py`/
+`otros_analisis.py` -- `ars`/`descuento` ya viajaban en cada fila).
+Columna agregada en Por Cliente, Por SKU, Por Vendedor (pivot -- 4ta
+sub-columna por vendedor, `colSpan` por vendedor pasó de 3 a 4) y el popup
+`ComposicionModal`. No es ordenable (header plano, no `SortTh`) -- no se
+pidió. Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_pct_descuento_otros_analisis`.
+
 ## SNAP -> Sales by Line of Business (agregado 2026-10-19)
 
 Réplica en vivo de la hoja "Sales by Line of Business" del SNAP real
