@@ -908,6 +908,31 @@ ZONA_EXPORT = [
 ]
 
 
+def _agregado_mercado_por_pais(desde: date, hasta_incl: date) -> dict[str, list[float]]:
+    """{pais: [usd, cajas, costo_usd]} -- mismo generador `_lineas_vinos`
+    que `_agregado_mercado`, pero agrupado por país crudo (`d_pais`) en vez
+    de zona. Pedido de Ezequiel al revisar la hoja "Sales by Market_D":
+    *"esto no se ve en ningun lado: Brazil Colombia Peru Uruguay Paraguay
+    Ecuador Latin America"* -- los baldes de zona (Caribbean/Latin America/
+    Europe/Asia) necesitan desglose país por país debajo, con Actual/Last
+    Year reales (eso sí lo tiene el ERP); el Budget sigue sin existir a
+    nivel país (`budget_detalle.mercado` solo tiene zona/bucket), por eso
+    cada fila de país se arma sin `bud` -- ver `ventas_mercado()`."""
+    acc: dict[str, list[float]] = {}
+    for it in _lineas_vinos(desde, hasta_incl):
+        pais = (it.get("d_pais") or "Sin país").strip()
+        usd = float(it.get("valor_venta_mon_alt") or 0)
+        cajas = float(it.get("cantidad_cajas9l") or 0)
+        costo = float(it.get("costo_unit_mon_alt") or 0) * float(it.get("cantidad") or 0)
+        if (usd and costo > usd * 10) or costo > 500.0:
+            costo = 0.0
+        a = acc.setdefault(pais, [0.0, 0.0, 0.0])
+        a[0] += usd
+        a[1] += cajas
+        a[2] += costo
+    return acc
+
+
 def _agregado_mercado(desde: date, hasta_incl: date) -> dict[str, list[float]]:
     """{zona: [usd, cajas, costo_usd]} -- mismo generador `_lineas_vinos`
     que el resto de la app (Panel de Ventas/Otros Análisis/SBL, nunca un
@@ -975,17 +1000,38 @@ def ventas_mercado(desde: date, hasta_incl: date) -> list[dict | None]:
     ("n/d") para cualquier parte del rango anterior a `DESDE_HISTORICO`,
     mismo criterio ya usado para FdelMotte (sin fixture equivalente)."""
     agg = _agregado_mercado(desde, hasta_incl)
+    agg_pais = _agregado_mercado_por_pais(desde, hasta_incl)
     desde_ly = date(desde.year - 1, desde.month, desde.day)
     hasta_ly = date(hasta_incl.year - 1, hasta_incl.month, hasta_incl.day)
-    ly = _agregado_mercado(desde_ly, hasta_ly) if desde_ly >= DESDE_HISTORICO else None
+    con_ly = desde_ly >= DESDE_HISTORICO
+    ly = _agregado_mercado(desde_ly, hasta_ly) if con_ly else None
+    ly_pais = _agregado_mercado_por_pais(desde_ly, hasta_ly) if con_ly else None
     bud = _agregado_mercado_budget(desde, hasta_incl)
 
     domestic_rows = [_fila_zona(label, zona, agg, ly, bud) for label, zona in ZONA_DOMESTIC]
     airlines = _cero("AirLines")
     total_domestic = _sumar("Total Domestic", domestic_rows)
 
-    export_rows = [_fila_zona(label, zona, agg, ly, bud) for label, zona in ZONA_EXPORT]
-    total_export = _sumar("Total Export", export_rows)
+    # País → zona (`get_pais_zona_map()`, misma fuente que Panel de Ventas)
+    # invertido, para desglosar cada balde de exportación con >1 país real
+    # mapeado -- ver `_agregado_mercado_por_pais()`.
+    paises_por_zona: dict[str, list[str]] = {}
+    for pais, zona in get_pais_zona_map().items():
+        paises_por_zona.setdefault(zona, []).append(pais)
+
+    export_rows_display: list[dict] = []
+    export_totales: list[dict] = []
+    for label, zona in ZONA_EXPORT:
+        total_zona = _fila_zona(label, zona, agg, ly, bud)
+        export_totales.append(total_zona)
+        paises = sorted(paises_por_zona.get(zona, []))
+        if len(paises) > 1:
+            export_rows_display.extend(
+                _fila_zona(pais.title(), pais, agg_pais, ly_pais, None) for pais in paises
+            )
+        export_rows_display.append(total_zona)
+
+    total_export = _sumar("Total Export", export_totales)
 
     total_branded = _sumar("Total Branded Wine", [total_domestic, total_export])
     bob_total = _cero("Total Buyers Own Brand")
@@ -994,7 +1040,7 @@ def ventas_mercado(desde: date, hasta_incl: date) -> list[dict | None]:
     return [
         *domestic_rows[:3], airlines, domestic_rows[3], total_domestic,
         None,
-        *export_rows, total_export,
+        *export_rows_display, total_export,
         None,
         total_branded,
         None,

@@ -33,7 +33,9 @@ function td(content, cls) {
 // meses del ejercicio 2026-2027.) ----------
 const SBL_TOTAL_ROWS = new Set(['TOTAL SALES TO THIRD PARTIES', 'TOTAL SALES', 'Total Grupo Colome Brand', 'Total Buyers Own Brand (BOB)', 'Total Intercompany Sales', 'Direct-to-consumer Channel',
   // Sales by Market (2026-11-03)
-  'Total Domestic', 'Total Export', 'Total Branded Wine', 'Total Buyers Own Brand', 'TOTAL']);
+  'Total Domestic', 'Total Export', 'Total Branded Wine', 'Total Buyers Own Brand', 'TOTAL',
+  // Sales by Market: subtotales de zona con desglose país por país debajo
+  'Total Caribbean', 'Total Latin America', 'Europe', 'Asia Pacific and Middle East']);
 
 function renderSbl(rows) {
   let html = `<table><thead>
