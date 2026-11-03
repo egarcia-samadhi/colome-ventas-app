@@ -722,9 +722,11 @@ def ventas_cliente_por_marca_producto(desde: date, hasta_incl: date, cliente: st
     """Otros Análisis -> Por Cliente: drill-down al hacer click en un
     cliente (2026-11-03, pedido explícito de Ezequiel: "el drill-down, no
     tiene que ser por factura, tiene que ser por marca - producto" --
-    reemplaza el popup `ComposicionModal` por factura que tenía Por
-    Cliente desde el 2026-11-02; Por SKU y Por Vendedor NO se tocaron,
-    siguen abriendo la composición por factura).
+    reemplaza el popup de composición por factura que tenía Por Cliente
+    desde el 2026-11-02. Mismo día, Por SKU y Por Vendedor también
+    dejaron la apertura por factura -- ver `ventas_producto_por_cliente`
+    más abajo; `detalle_por_factura`/`/detalle-facturas` se sacaron del
+    todo por no tener ya ningún consumidor).
 
     Agrega SOLO las líneas de `cliente` por (Marca=`d_rubro`, c_articulo,
     d_articulo) -- mismo campo real de descuento (`m_desc_total`) y mismo
@@ -759,52 +761,46 @@ def ventas_cliente_por_marca_producto(desde: date, hasta_incl: date, cliente: st
     return out
 
 
-def detalle_por_factura(
-    desde: date, hasta_incl: date, *,
-    cliente: str | None = None, c_articulo: str | None = None, vendedor: str | None = None,
-) -> list[dict]:
-    """Otros Análisis -> Por Cliente/SKU/Vendedor: "composición en ventana
-    flotante" (pedido explícito de Ezequiel 2026-11-02, "por factura").
-    Click en una fila del ranking/tabla abre un popup con las facturas
-    REALES que componen ese total -- mismo patrón que el popup "Sales by
-    Market" de Sales Performance, pero a nivel factura en vez de mercado.
+def ventas_producto_por_cliente(desde: date, hasta_incl: date, c_articulo: str, *, vendedor: str | None = None) -> list[dict]:
+    """Otros Análisis -> Por SKU / Por Vendedor: drill-down al hacer click
+    en un artículo (2026-11-03, pedido explícito de Ezequiel -- Por SKU:
+    "por sku, tenemos que aplicar el mismo criterio. el drill down es por
+    cliente, no por factura"; Por Vendedor, mismo día: "por ultimo, por
+    vendedor, no hagas la apertura por factura" -- confirmado que el
+    reemplazo es el mismo desglose por Cliente, no sacar la apertura del
+    todo). Mismo criterio que `ventas_cliente_por_marca_producto` pero al
+    revés: ahí se fija el cliente y se desglosa por producto, acá se fija
+    el producto (+ opcionalmente vendedor) y se desglosa por cliente.
 
-    Agrega por (comprobante, número, fecha) -- UNA fila por factura, aunque
-    esa factura tenga más de una línea dentro del filtro pedido (ej. 2
-    artículos distintos de la misma marca en una sola factura del cliente
-    clickeado) -- "por factura" es el nivel de composición pedido, no
-    línea por línea. `cliente`/`c_articulo`/`vendedor` son filtros
-    opcionales combinables (el caller pasa los que correspondan según
-    desde qué fila se abrió el popup: Por Cliente pasa `cliente`, Por SKU
-    pasa `c_articulo`, Por Vendedor puede pasar `c_articulo`+`vendedor`
-    juntos para la celda específica clickeada)."""
-    acc: dict[tuple[str, str | None, str], list] = {}
+    Agrega las líneas de `c_articulo` (y de `vendedor` si se pasa, para la
+    celda vendedor×artículo de Por Vendedor) por cliente -- mismo campo
+    real de descuento (`m_desc_total`) y mismo criterio de `mg_pct` que
+    `ventas_por_sku`/`ventas_cliente_por_marca_producto`."""
+    acc: dict[str, list[float]] = {}
     for it in _lineas_vinos(desde, hasta_incl):
-        if cliente is not None and (it.get("n_cliente") or "Sin cliente") != cliente:
-            continue
-        if c_articulo is not None and (it.get("c_articulo") or "") != c_articulo:
+        if (it.get("c_articulo") or "") != c_articulo:
             continue
         if vendedor is not None and (it.get("n_vendedor") or "Sin vendedor") != vendedor:
             continue
-        fecha = (it.get("fecha") or "")[:10]
-        key = (it.get("d_comprobante") or "Sin comprobante", it.get("numero"), fecha)
-        a = acc.setdefault(key, [
-            0.0, 0.0, 0.0, 0.0,
-            it.get("n_cliente") or "Sin cliente", it.get("n_vendedor") or "Sin vendedor", set(),
-        ])
+        cliente = it.get("n_cliente") or "Sin cliente"
+        a = acc.setdefault(cliente, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         cantidad = float(it.get("cantidad") or 0)
         a[0] += float(it.get("cantidad_cajas9l") or 0)
         a[1] += cantidad
         a[2] += float(it.get("valor_mon_loc") or 0)
-        a[3] += float(it.get("m_desc_total") or 0)
-        a[6].add(it.get("d_articulo") or "Sin artículo")
+        a[3] += float(it.get("valor_venta_mon_alt") or 0)
+        a[4] += float(it.get("costo_unit_mon_alt") or 0) * cantidad
+        a[5] += float(it.get("m_desc_total") or 0)
     out = []
-    for (comprobante, numero, fecha), (cajas, cantidad, ars, descuento, cli, vend, articulos) in acc.items():
+    for cliente, (cajas, cantidad, ars, usd, costo_usd, descuento) in acc.items():
+        mg_pct = (usd - costo_usd) / usd if usd else 0.0
         out.append({
-            "comprobante": comprobante, "numero": numero, "fecha": fecha,
-            "cliente": cli, "vendedor": vend, "articulos": ", ".join(sorted(articulos)),
+            "cliente": cliente,
             "cajas": round(cajas, 4), "cantidad": round(cantidad, 2),
             "ars": round(ars, 2), "descuento": round(descuento, 2),
+            "mg_pct": round(mg_pct, 6),
         })
-    out.sort(key=lambda r: r["fecha"])
+    out.sort(key=lambda r: -r["ars"])
     return out
+
+

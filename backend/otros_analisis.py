@@ -28,19 +28,30 @@
   antes). Ver `ventas_por_sku`/`ventas_por_vendedor` en ig_ventas.py para
   el detalle de qué cambió en cada una.
 
-- Composición "por factura" en ventana flotante (2026-11-02, pedido
-  explícito de Ezequiel: "por cliente, por sku y por vendedor, podremos
-  mostrar la composicion en una ventana flotante?" -> "por factura"):
-  `/detalle-facturas` -- mismo rango libre, filtros opcionales
-  cliente/c_articulo/vendedor combinables. Ver `detalle_por_factura` en
+- Composición "por factura" en ventana flotante, agregada 2026-11-02 y
+  SACADA del todo 2026-11-03 (mismo día, Ezequiel reemplazó el criterio en
+  las 3 vistas -- ver el punto siguiente): el drill-down de las 3 pasó a
+  ser agregado (Marca/Producto o Cliente), no un listado de facturas
+  reales.
+
+- Drill-down por Marca/Producto (Por Cliente) y por Cliente (Por SKU/Por
+  Vendedor), agregado 2026-11-03 (pedido explícito de Ezequiel, 3
+  mensajes el mismo día -- "el drill-down, no tiene que ser por factura,
+  tiene que ser por marca - producto" para Por Cliente; "por sku, tenemos
+  que aplicar el mismo criterio. el drill down es por cliente, no por
+  factura"; "por ultimo, por vendedor, no hagas la apertura por factura"
+  -- confirmado que el reemplazo es el mismo desglose por Cliente que Por
+  SKU). `/por-cliente/marca-producto` y `/por-sku/cliente` (este último
+  reusado por Por Vendedor con un `vendedor` opcional). Ver
+  `ventas_cliente_por_marca_producto`/`ventas_producto_por_cliente` en
   ig_ventas.py."""
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ig_ventas import (
-    desglose_por_grupo, detalle_por_factura, ventas_cliente_por_marca_producto,
-    ventas_por_cliente, ventas_por_sku, ventas_por_vendedor,
+    desglose_por_grupo, ventas_cliente_por_marca_producto,
+    ventas_por_cliente, ventas_por_sku, ventas_por_vendedor, ventas_producto_por_cliente,
 )
 
 router = APIRouter(prefix="/api/otros-analisis", tags=["otros-analisis"])
@@ -135,24 +146,25 @@ async def por_cliente_marca_producto(
     # Drill-down de Por Cliente (2026-11-03, pedido explícito de Ezequiel:
     # "el drill-down, no tiene que ser por factura, tiene que ser por
     # marca - producto") -- reemplaza el popup de composición por factura
-    # que tenía Por Cliente. Por SKU/Por Vendedor siguen con el popup por
-    # factura (`/detalle-facturas`), sin tocar.
+    # que tenía Por Cliente.
     desde_d, hasta_d = date.fromisoformat(desde), date.fromisoformat(hasta)
     rows = ventas_cliente_por_marca_producto(desde_d, hasta_d, cliente)
     return {"rows": rows}
 
 
-@router.get("/detalle-facturas")
-async def detalle_facturas(
+@router.get("/por-sku/cliente")
+async def por_sku_cliente(
     desde: str = Query(..., description="YYYY-MM-DD"),
     hasta: str = Query(..., description="YYYY-MM-DD inclusive"),
-    cliente: str | None = Query(None),
-    c_articulo: str | None = Query(None),
-    vendedor: str | None = Query(None),
+    c_articulo: str = Query(...),
+    vendedor: str | None = Query(None, description="Opcional -- Por Vendedor pasa la celda vendedor×artículo clickeada"),
     user=Depends(require_reader),
 ):
-    if not (cliente or c_articulo or vendedor):
-        raise HTTPException(status_code=400, detail="falta cliente, c_articulo o vendedor")
+    # Drill-down de Por SKU (2026-11-03, pedido explícito de Ezequiel: "por
+    # sku, tenemos que aplicar el mismo criterio. el drill down es por
+    # cliente, no por factura") y de Por Vendedor, mismo día ("por ultimo,
+    # por vendedor, no hagas la apertura por factura" -- mismo desglose,
+    # con `vendedor` para acotar a la celda vendedor×artículo clickeada).
     desde_d, hasta_d = date.fromisoformat(desde), date.fromisoformat(hasta)
-    rows = detalle_por_factura(desde_d, hasta_d, cliente=cliente, c_articulo=c_articulo, vendedor=vendedor)
+    rows = ventas_producto_por_cliente(desde_d, hasta_d, c_articulo, vendedor=vendedor)
     return {"rows": rows}

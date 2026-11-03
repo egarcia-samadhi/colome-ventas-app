@@ -237,120 +237,6 @@ function ordenar<T, K extends string>(filas: T[], sort: SortState<K>, valor: (f:
   });
 }
 
-interface FilaFactura {
-  comprobante: string; numero: number | string; fecha: string;
-  cliente: string; vendedor: string; articulos: string;
-  cajas: number; cantidad: number; ars: number; descuento: number;
-}
-
-// Composición "por factura" en ventana flotante (pedido explícito de
-// Ezequiel 2026-11-02, "por cliente, por sku y por vendedor, podremos
-// mostrar la composicion en una ventana flotante?" -> "por factura").
-// Mismo patrón que el popup "Sales by Market" de Sales Performance (click
-// en una fila/celda abre el detalle real que la compone), acá a nivel
-// factura: una fila por (comprobante, número, fecha), aunque esa factura
-// tenga más de una línea dentro del filtro (los artículos se juntan en
-// una sola celda). Componente compartido por las 3 vistas -- cada una le
-// pasa los filtros que correspondan (cliente / c_articulo / vendedor,
-// combinables).
-function ComposicionModal({ titulo, desde, hasta, filtro, onClose }: {
-  titulo: string; desde: string; hasta: string;
-  filtro: { cliente?: string; c_articulo?: string; vendedor?: string };
-  onClose: () => void;
-}) {
-  const [rows, setRows] = useState<FilaFactura[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    const qs = new URLSearchParams({ desde, hasta, ...filtro as Record<string, string> });
-    fetch(`/api/otros-analisis/detalle-facturas?${qs}`)
-      .then((r) => {
-        if (r.status === 401) { window.location.href = "/"; return null; }
-        if (!r.ok) throw new Error("Error cargando el detalle");
-        return r.json();
-      })
-      .then((d) => { if (d) setRows(d.rows); })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [desde, hasta, filtro.cliente, filtro.c_articulo, filtro.vendedor]);
-
-  const total = rows.reduce((a, f) => ({ cajas: a.cajas + f.cajas, cantidad: a.cantidad + f.cantidad, ars: a.ars + f.ars, descuento: a.descuento + f.descuento }), { cajas: 0, cantidad: 0, ars: 0, descuento: 0 });
-  const mostrarCliente = !filtro.cliente;
-  const mostrarVendedor = !filtro.vendedor;
-  const mostrarArticulos = !filtro.c_articulo;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="bg-white rounded-[18px] shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between p-6 pb-4 border-b border-[#ece6d8]">
-          <div>
-            <h3 className="text-sm font-semibold text-[#1c1811]">Composición por factura — {titulo}</h3>
-            <p className="text-[11px] text-[#847c68] mt-0.5">{desde} a {hasta}, ventas VINOS.</p>
-          </div>
-          <button onClick={onClose} className="text-[#847c68] hover:text-[#1c1811] text-xl leading-none">×</button>
-        </div>
-        <div className="overflow-auto p-6 pt-4">
-          {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-          {loading ? (
-            <div className="h-48 rounded-md bg-[#f7f5f0] animate-pulse" />
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#f7f5f0]">
-                  <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Fecha</th>
-                  <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Comprobante</th>
-                  {mostrarCliente && <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cliente</th>}
-                  {mostrarVendedor && <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Vendedor</th>}
-                  {mostrarArticulos && <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Artículo(s)</th>}
-                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cajas9l</th>
-                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
-                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Desc. Comercial</th>
-                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">% Desc.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 ? (
-                  <tr><td colSpan={9} className="py-10 text-center text-[#847c68]">Sin facturas para este filtro</td></tr>
-                ) : (
-                  <>
-                    {rows.map((f) => (
-                      <tr key={`${f.comprobante}::${f.numero}::${f.fecha}`} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
-                        <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{f.fecha}</td>
-                        <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{f.comprobante} {f.numero}</td>
-                        {mostrarCliente && <td className="py-1.5 px-3 text-[#1c1811]">{f.cliente}</td>}
-                        {mostrarVendedor && <td className="py-1.5 px-3 text-[#1c1811]">{f.vendedor}</td>}
-                        {mostrarArticulos && <td className="py-1.5 px-3 text-[#1c1811]">{f.articulos}</td>}
-                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas)}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.descuento)}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(f.descuento, f.ars)}</td>
-                      </tr>
-                    ))}
-                    <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
-                      <td className="py-1.5 px-3" colSpan={1 + (mostrarCliente ? 1 : 0) + (mostrarVendedor ? 1 : 0) + (mostrarArticulos ? 1 : 0) + 1}>Total ({rows.length} facturas)</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.cajas)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.ars)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.descuento)}</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(total.descuento, total.ars)}</td>
-                    </tr>
-                  </>
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function useOtrosAnalisisRango<T>(endpoint: string, desde: string, hasta: string) {
   const [rows, setRows] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
@@ -381,10 +267,12 @@ interface FilaMarcaProducto {
 
 // Drill-down de Por Cliente (2026-11-03, pedido explícito de Ezequiel: "el
 // drill-down, no tiene que ser por factura, tiene que ser por marca -
-// producto") -- reemplaza `ComposicionModal` (que Por SKU/Por Vendedor
-// siguen usando, sin tocar) para la fila de cliente: en vez de listar las
-// facturas reales, agrupa por Marca/Producto -- mismo patrón visual que la
-// tabla de Por SKU (columnas, Precio Promedio incluido).
+// producto") -- agrupa por Marca/Producto en vez de listar facturas
+// reales, mismo patrón visual que la tabla de Por SKU (Precio Promedio
+// incluido). Mismo día, Por SKU y Por Vendedor también dejaron el drill-
+// down por factura (ver `DesgloseClienteModal` más abajo) -- la
+// composición por factura (`ComposicionModal`/`/detalle-facturas`) quedó
+// sin ningún consumidor y se sacó del todo, no quedó código muerto.
 function DesgloseMarcaProductoModal({ cliente, desde, hasta, onClose }: {
   cliente: string; desde: string; hasta: string; onClose: () => void;
 }) {
@@ -463,6 +351,103 @@ function DesgloseMarcaProductoModal({ cliente, desde, hasta, onClose }: {
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.descuento)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(total.descuento, total.ars)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{total.cajas ? fmtNum(total.ars / total.cajas) : "—"}</td>
+                    </tr>
+                  </>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface FilaDesgloseCliente {
+  cliente: string; cajas: number; cantidad: number; ars: number; descuento: number; mg_pct: number;
+}
+
+// Drill-down de Por SKU (2026-11-03, pedido explícito de Ezequiel: "por
+// sku, tenemos que aplicar el mismo criterio. el drill down es por
+// cliente, no por factura") -- mismo cambio que Por Cliente el mismo día
+// (ver `DesgloseMarcaProductoModal`), acá al revés: fija el producto,
+// desglosa por cliente. Reusado por Por Vendedor (mismo día, "por
+// ultimo, por vendedor, no hagas la apertura por factura" -- mismo
+// desglose, con `vendedor` opcional para acotar a la celda
+// vendedor×artículo clickeada).
+function DesgloseClienteModal({ titulo, c_articulo, vendedor, desde, hasta, onClose }: {
+  titulo: string; c_articulo: string; vendedor?: string; desde: string; hasta: string; onClose: () => void;
+}) {
+  const [rows, setRows] = useState<FilaDesgloseCliente[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    const qs = new URLSearchParams({ desde, hasta, c_articulo, ...(vendedor ? { vendedor } : {}) });
+    fetch(`/api/otros-analisis/por-sku/cliente?${qs}`)
+      .then((r) => {
+        if (r.status === 401) { window.location.href = "/"; return null; }
+        if (!r.ok) throw new Error("Error cargando el desglose");
+        return r.json();
+      })
+      .then((d) => { if (d) setRows(d.rows); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desde, hasta, c_articulo, vendedor]);
+
+  const total = rows.reduce((a, f) => ({ cajas: a.cajas + f.cajas, ars: a.ars + f.ars, descuento: a.descuento + f.descuento }), { cajas: 0, ars: 0, descuento: 0 });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-[18px] shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between p-6 pb-4 border-b border-[#ece6d8]">
+          <div>
+            <h3 className="text-sm font-semibold text-[#1c1811]">Desglose por Cliente — {titulo}</h3>
+            <p className="text-[11px] text-[#847c68] mt-0.5">{desde} a {hasta}, ventas VINOS.</p>
+          </div>
+          <button onClick={onClose} className="text-[#847c68] hover:text-[#1c1811] text-xl leading-none">×</button>
+        </div>
+        <div className="overflow-auto p-6 pt-4">
+          {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+          {loading ? (
+            <div className="h-48 rounded-md bg-[#f7f5f0] animate-pulse" />
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#f7f5f0]">
+                  <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cliente</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cajas9l</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Desc. Comercial</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">% Desc.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr><td colSpan={5} className="py-10 text-center text-[#847c68]">Sin ventas de este artículo en el rango</td></tr>
+                ) : (
+                  <>
+                    {rows.map((f) => (
+                      <tr key={f.cliente} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
+                        <td className="py-1.5 px-3 text-[#1c1811]">{f.cliente}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.descuento)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(f.descuento, f.ars)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
+                      <td className="py-1.5 px-3">Total ({rows.length} clientes)</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.cajas)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.ars)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.descuento)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(total.descuento, total.ars)}</td>
                     </tr>
                   </>
                 )}
@@ -711,16 +696,16 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
   return (
     <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
       {composicion && (
-        <ComposicionModal
+        <DesgloseClienteModal
           titulo={composicion.d_articulo}
+          c_articulo={composicion.c_articulo}
           desde={desde} hasta={hasta}
-          filtro={{ c_articulo: composicion.c_articulo }}
           onClose={() => setComposicion(null)}
         />
       )}
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-[#1c1811]">Por SKU</h3>
-        <p className="text-[11px] text-[#847c68] mt-0.5">Ranking de productos (ventas VINOS), Venta Neta y Descuento Comercial en ARS. Filtrar por Marca/Mercado en el sidebar. Click en un artículo para ver su composición por factura.</p>
+        <p className="text-[11px] text-[#847c68] mt-0.5">Ranking de productos (ventas VINOS), Venta Neta y Descuento Comercial en ARS. Filtrar por Marca/Mercado en el sidebar. Click en un artículo para ver su desglose por Cliente.</p>
       </div>
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
       {loading ? (
@@ -919,10 +904,11 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
   return (
     <div className="space-y-5">
       {composicion && (
-        <ComposicionModal
+        <DesgloseClienteModal
           titulo={`${composicion.d_articulo} — ${composicion.vendedor}`}
+          c_articulo={composicion.c_articulo}
+          vendedor={composicion.vendedor}
           desde={desde} hasta={hasta}
-          filtro={{ c_articulo: composicion.c_articulo, vendedor: composicion.vendedor }}
           onClose={() => setComposicion(null)}
         />
       )}
@@ -930,7 +916,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
       <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-[#1c1811]">Por Vendedor</h3>
-          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad, Descuento Comercial y Venta Neta (ARS) por artículo, separado por vendedor. Vista acumulada del rango. Click en una Venta Neta para ver su composición por factura.</p>
+          <p className="text-[11px] text-[#847c68] mt-0.5">Cantidad, Descuento Comercial y Venta Neta (ARS) por artículo, separado por vendedor. Vista acumulada del rango. Click en una Venta Neta para ver su desglose por Cliente.</p>
         </div>
         {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
         {loading ? (
