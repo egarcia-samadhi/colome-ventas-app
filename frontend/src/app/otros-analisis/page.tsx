@@ -374,6 +374,107 @@ function useOtrosAnalisisRango<T>(endpoint: string, desde: string, hasta: string
   return { rows, loading, error };
 }
 
+interface FilaMarcaProducto {
+  marca: string; c_articulo: string; d_articulo: string;
+  cajas: number; cantidad: number; ars: number; descuento: number; mg_pct: number;
+}
+
+// Drill-down de Por Cliente (2026-11-03, pedido explícito de Ezequiel: "el
+// drill-down, no tiene que ser por factura, tiene que ser por marca -
+// producto") -- reemplaza `ComposicionModal` (que Por SKU/Por Vendedor
+// siguen usando, sin tocar) para la fila de cliente: en vez de listar las
+// facturas reales, agrupa por Marca/Producto -- mismo patrón visual que la
+// tabla de Por SKU (columnas, Precio Promedio incluido).
+function DesgloseMarcaProductoModal({ cliente, desde, hasta, onClose }: {
+  cliente: string; desde: string; hasta: string; onClose: () => void;
+}) {
+  const [rows, setRows] = useState<FilaMarcaProducto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    const qs = new URLSearchParams({ desde, hasta, cliente });
+    fetch(`/api/otros-analisis/por-cliente/marca-producto?${qs}`)
+      .then((r) => {
+        if (r.status === 401) { window.location.href = "/"; return null; }
+        if (!r.ok) throw new Error("Error cargando el desglose");
+        return r.json();
+      })
+      .then((d) => { if (d) setRows(d.rows); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desde, hasta, cliente]);
+
+  const total = rows.reduce((a, f) => ({ cajas: a.cajas + f.cajas, ars: a.ars + f.ars, descuento: a.descuento + f.descuento }), { cajas: 0, ars: 0, descuento: 0 });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-[18px] shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between p-6 pb-4 border-b border-[#ece6d8]">
+          <div>
+            <h3 className="text-sm font-semibold text-[#1c1811]">Desglose por Marca/Producto — {cliente}</h3>
+            <p className="text-[11px] text-[#847c68] mt-0.5">{desde} a {hasta}, ventas VINOS.</p>
+          </div>
+          <button onClick={onClose} className="text-[#847c68] hover:text-[#1c1811] text-xl leading-none">×</button>
+        </div>
+        <div className="overflow-auto p-6 pt-4">
+          {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+          {loading ? (
+            <div className="h-48 rounded-md bg-[#f7f5f0] animate-pulse" />
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-[#f7f5f0]">
+                  <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Marca</th>
+                  <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Producto</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cajas9l</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Desc. Comercial</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">% Desc.</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Precio Prom. (Caja9l)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr><td colSpan={7} className="py-10 text-center text-[#847c68]">Sin ventas para este cliente en el rango</td></tr>
+                ) : (
+                  <>
+                    {rows.map((f) => (
+                      <tr key={`${f.marca}::${f.c_articulo}`} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
+                        <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{f.marca}</td>
+                        <td className="py-1.5 px-3 text-[#1c1811]">{f.d_articulo}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.descuento)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(f.descuento, f.ars)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{f.cajas ? fmtNum(f.ars / f.cajas) : "—"}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
+                      <td className="py-1.5 px-3" colSpan={2}>Total ({rows.length} productos)</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.cajas)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.ars)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.descuento)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(total.descuento, total.ars)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{total.cajas ? fmtNum(total.ars / total.cajas) : "—"}</td>
+                    </tr>
+                  </>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type Segmentador = "vendedor" | "canal";
 type ColCliente = "cliente" | "cajas" | "cantidad" | "ars" | "descuento";
 
@@ -461,16 +562,15 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
   return (
     <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
       {composicion && (
-        <ComposicionModal
-          titulo={composicion}
+        <DesgloseMarcaProductoModal
+          cliente={composicion}
           desde={desde} hasta={hasta}
-          filtro={{ cliente: composicion }}
           onClose={() => setComposicion(null)}
         />
       )}
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-[#1c1811]">Por Cliente</h3>
-        <p className="text-[11px] text-[#847c68] mt-0.5">Ranking de clientes (ventas VINOS), Venta Neta y Descuento Comercial en ARS. Filtrar por {segmentador} en el sidebar. Click en un cliente para ver su composición por factura.</p>
+        <p className="text-[11px] text-[#847c68] mt-0.5">Ranking de clientes (ventas VINOS), Venta Neta y Descuento Comercial en ARS. Filtrar por {segmentador} en el sidebar. Click en un cliente para ver su desglose por Marca/Producto.</p>
       </div>
       {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
       {loading ? (

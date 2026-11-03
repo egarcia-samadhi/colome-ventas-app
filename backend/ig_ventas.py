@@ -718,6 +718,47 @@ def ventas_por_vendedor(desde: date, hasta_incl: date) -> list[dict]:
     return out
 
 
+def ventas_cliente_por_marca_producto(desde: date, hasta_incl: date, cliente: str) -> list[dict]:
+    """Otros Análisis -> Por Cliente: drill-down al hacer click en un
+    cliente (2026-11-03, pedido explícito de Ezequiel: "el drill-down, no
+    tiene que ser por factura, tiene que ser por marca - producto" --
+    reemplaza el popup `ComposicionModal` por factura que tenía Por
+    Cliente desde el 2026-11-02; Por SKU y Por Vendedor NO se tocaron,
+    siguen abriendo la composición por factura).
+
+    Agrega SOLO las líneas de `cliente` por (Marca=`d_rubro`, c_articulo,
+    d_articulo) -- mismo campo real de descuento (`m_desc_total`) y mismo
+    criterio de `mg_pct` que `ventas_por_sku` (ver su docstring)."""
+    acc: dict[tuple[str, str, str], list[float]] = {}
+    for it in _lineas_vinos(desde, hasta_incl):
+        if (it.get("n_cliente") or "Sin cliente") != cliente:
+            continue
+        k = (
+            it.get("d_rubro") or "Sin marca",
+            it.get("c_articulo") or "",
+            it.get("d_articulo") or "Sin artículo",
+        )
+        a = acc.setdefault(k, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        cantidad = float(it.get("cantidad") or 0)
+        a[0] += float(it.get("cantidad_cajas9l") or 0)
+        a[1] += cantidad
+        a[2] += float(it.get("valor_mon_loc") or 0)
+        a[3] += float(it.get("valor_venta_mon_alt") or 0)
+        a[4] += float(it.get("costo_unit_mon_alt") or 0) * cantidad
+        a[5] += float(it.get("m_desc_total") or 0)
+    out = []
+    for (marca, c_articulo, d_articulo), (cajas, cantidad, ars, usd, costo_usd, descuento) in acc.items():
+        mg_pct = (usd - costo_usd) / usd if usd else 0.0
+        out.append({
+            "marca": marca, "c_articulo": c_articulo, "d_articulo": d_articulo,
+            "cajas": round(cajas, 4), "cantidad": round(cantidad, 2),
+            "ars": round(ars, 2), "descuento": round(descuento, 2),
+            "mg_pct": round(mg_pct, 6),
+        })
+    out.sort(key=lambda r: -r["ars"])
+    return out
+
+
 def detalle_por_factura(
     desde: date, hasta_incl: date, *,
     cliente: str | None = None, c_articulo: str | None = None, vendedor: str | None = None,

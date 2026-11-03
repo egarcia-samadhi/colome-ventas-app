@@ -39,7 +39,8 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ig_ventas import (
-    desglose_por_grupo, detalle_por_factura, ventas_por_cliente, ventas_por_sku, ventas_por_vendedor,
+    desglose_por_grupo, detalle_por_factura, ventas_cliente_por_marca_producto,
+    ventas_por_cliente, ventas_por_sku, ventas_por_vendedor,
 )
 
 router = APIRouter(prefix="/api/otros-analisis", tags=["otros-analisis"])
@@ -122,6 +123,23 @@ async def por_vendedor(
         desde_d, hasta_d = _rango_mes(_periodo_default())
     rows = ventas_por_vendedor(desde_d, hasta_d)
     return {"desde": desde_d.isoformat(), "hasta": hasta_d.isoformat(), "rows": rows}
+
+
+@router.get("/por-cliente/marca-producto")
+async def por_cliente_marca_producto(
+    desde: str = Query(..., description="YYYY-MM-DD"),
+    hasta: str = Query(..., description="YYYY-MM-DD inclusive"),
+    cliente: str = Query(...),
+    user=Depends(require_reader),
+):
+    # Drill-down de Por Cliente (2026-11-03, pedido explícito de Ezequiel:
+    # "el drill-down, no tiene que ser por factura, tiene que ser por
+    # marca - producto") -- reemplaza el popup de composición por factura
+    # que tenía Por Cliente. Por SKU/Por Vendedor siguen con el popup por
+    # factura (`/detalle-facturas`), sin tocar.
+    desde_d, hasta_d = date.fromisoformat(desde), date.fromisoformat(hasta)
+    rows = ventas_cliente_por_marca_producto(desde_d, hasta_d, cliente)
+    return {"rows": rows}
 
 
 @router.get("/detalle-facturas")
