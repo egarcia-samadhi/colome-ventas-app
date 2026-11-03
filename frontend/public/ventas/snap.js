@@ -353,8 +353,28 @@ function poblarSelectorMes() {
 poblarSelectorMes();
 
 const snapMesSel = document.getElementById('snapMesSel');
+const snapMesStatus = document.getElementById('snapMesStatus');
 if (snapMesSel) {
-  snapMesSel.addEventListener('change', (e) => {
-    snapInstances.forEach(inst => inst.refetch(e.target.value));
+  snapMesSel.addEventListener('change', async (e) => {
+    // Feedback visual (2026-11-03, Ezequiel: "tarda bastante... no dice ni
+    // cargando ni nada, el usuario no sabe si se tildó, si no anda o qué")
+    // -- antes el refetch corría sin ningún indicador. Atenúa las 2 tablas
+    // (Consolidado + FdelMotte) y deshabilita el selector mientras refetchea.
+    snapMesSel.disabled = true;
+    if (snapMesStatus) snapMesStatus.hidden = false;
+    ['snapConsolidado', 'snapFdelMotte'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('snap-loading');
+    });
+    try {
+      await Promise.all(snapInstances.map(inst => inst.refetch(e.target.value)));
+    } finally {
+      snapMesSel.disabled = false;
+      if (snapMesStatus) snapMesStatus.hidden = true;
+      ['snapConsolidado', 'snapFdelMotte'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('snap-loading');
+      });
+    }
   });
 }
