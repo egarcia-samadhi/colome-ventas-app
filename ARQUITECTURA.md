@@ -1010,6 +1010,46 @@ etiquetar:
 Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_controles_mas_claros`.
 
+## Controles: Cruce AFIP avisa mes cerrado sin cargar (agregado 2026-11-03)
+
+Pedido explícito de Ezequiel: *"cruce afip no esta pidiendo la info de
+octubre, esta controlando a octubre a pesar que ya estamos en noviembre
+y cerró octubre"*. Causa real: `_rango_a_chequear()` arma el rango a
+controlar leyendo `MIN/MAX(periodo)` de `afip_comprobantes` -- depende
+de lo que YA se cargó a mano a Info AFIP, no del calendario. Si nadie
+sube el export del mes recién cerrado, el control seguía "Al día" en
+silencio sobre el último mes sí cargado (verificado en vivo antes del
+fix: rango hasta `2026-09-30`, `ok: true`, aunque octubre ya había
+cerrado).
+
+- **Backend:** `_ultimo_mes_cerrado()` nuevo en `controles.py`
+  (duplicado liviano de `_mes_cerrado_anterior()` de `snap.py`). El
+  control `cruce_afip` compara el fin del rango ya cargado contra el fin
+  del último mes calendario cerrado -- si quedó atrás, `ok=False` y
+  `detalle` dice explícito `"Falta cargar Info AFIP de <YYYY-MM> (ya
+  cerrado)"`, antepuesto a cualquier diferencia de moneda real.
+- No se tocó `_rango_a_chequear()` en sí -- los otros 3 controles de la
+  pantalla (Jurisdicciones/SBL/Canal sin clasificar) siguen igual.
+
+Verificado en vivo: tras el fix, `/api/controles` → `{"ok": false,
+"detalle": "Falta cargar Info AFIP de 2026-10 (ya cerrado)"}`, visible
+en pantalla como fila naranja. Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_cruce_afip_mes_pendiente`.
+
+**Pendientes relacionados, del mismo pedido de Ezequiel (NO
+implementados, diagnosticados solamente -- ver memoria de Claude
+`proyecto_colome_ventas_pendientes_controles_budget_region` antes de
+arrancar cualquiera):**
+- Budget (`budget/page.tsx`) es un `<Placeholder>` -- nunca se construyó
+  pantalla real de lectura/edición, aunque el Budget SÍ se usa en vivo
+  (archivos estáticos `backend/budget_2026_2027.json`/
+  `budget_linea_2026_2027.json`, no editables desde la app).
+- "Región" (`zona` = `d_zona_comercial` crudo) no tiene agrupante en
+  Datos Maestros, a diferencia de Canal/Marca.
+- Ventas por Región (el mapa) no muestra LY -- recomendación dada:
+  agregarlo como una 4ta vista "Por Región" en Otros Análisis en vez de
+  al mapa, para no complicar la lectura geográfica.
+
 ## Sales Performance: feedback visual + cache de SNAP (agregado 2026-11-03)
 
 Pedido explícito de Ezequiel: elegir un mes anterior en el selector de
