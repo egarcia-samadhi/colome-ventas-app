@@ -20,7 +20,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from datos_maestros import get_canal_agrupante_map, get_marca_agrupante_map, get_region_agrupante_map
+from datos_maestros import get_canal_agrupante_map, get_marca_agrupante_map, get_pais_zona_map, get_region_agrupante_map
 from ig_ventas import facts_panel_ventas
 
 router = APIRouter(prefix="/api/ventas", tags=["panel"])
@@ -39,7 +39,14 @@ def require_reader(request: Request):
 @router.get("/panel")
 async def panel_ventas(user=Depends(require_reader)):
     hoy = date.today()
-    data = facts_panel_ventas(DESDE_HISTORICO, hoy)
+    # País -> Región (2026-11-03, pedido explícito de Ezequiel: la regla de
+    # que Alemania cae en EUROPE antes era 100% implícita del ERP, ahora es
+    # editable desde Datos Maestros -- ver docstring de facts_panel_ventas
+    # en ig_ventas.py). Se aplica DENTRO de facts_panel_ventas, antes de
+    # codificar a dims/facts, para que corra igual en Panel de Ventas,
+    # Ventas por Región y el Agrupante de Región de abajo.
+    pais_zona_override = get_pais_zona_map()
+    data = facts_panel_ventas(DESDE_HISTORICO, hoy, pais_zona_override=pais_zona_override)
     # Filtro previo "Agrupante de Canal" (2026-10-21, pedido de Ariel
     # Culasso): paralelo a dims["canal"], mismo índice -- el frontend lo usa
     # para armar un filtro de conveniencia que tilda de una el conjunto de

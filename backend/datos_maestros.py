@@ -401,3 +401,83 @@ async def borrar_region_agrupante(zona_comercial: str, admin=Depends(require_adm
     if not borrado:
         raise HTTPException(status_code=404, detail=f"No existe la zona '{zona_comercial}' en el mapa de agrupantes")
     return {"ok": True}
+
+
+# País -> Región: pedido explícito de Ezequiel 2026-11-03 ("quiero que
+# crees una tabla en datos maestros que sea la regla para esta hoja [que
+# Alemania entra en EUROPE]... si ariel culasso quiere hacer un cambio de
+# region en un pais lo va a poder editar desde datos maestros"). A
+# diferencia de region_agrupante_mapa (agrupa zonas YA asignadas), esta
+# tabla REEMPLAZA la asignación país->zona que hoy viene 100% cruda del
+# ERP -- ver `facts_panel_ventas(..., pais_zona_override=...)` en
+# ig_ventas.py, que aplica el override antes de codificar los hechos (así
+# corre para Panel de Ventas, Ventas por Región y el Agrupante de Región a
+# la vez). Argentina queda afuera a propósito (desglose doméstico interno,
+# 4 zonas, no "1 país -> 1 zona").
+def get_pais_zona_map() -> dict[str, str]:
+    conn = get_db()
+    rows = conn.execute("SELECT pais, zona FROM pais_zona_mapa").fetchall()
+    conn.close()
+    return {r["pais"]: r["zona"] for r in rows}
+
+
+@router.get("/pais-zona")
+async def listar_pais_zona(user=Depends(require_reader)):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT pais, zona FROM pais_zona_mapa ORDER BY zona, pais"
+    ).fetchall()
+    conn.close()
+    return {"rows": [dict(r) for r in rows]}
+
+
+@router.post("/pais-zona")
+async def agregar_pais_zona(body: dict, admin=Depends(require_admin)):
+    pais = (body.get("pais") or "").strip()
+    zona = (body.get("zona") or "").strip()
+    if not pais or not zona:
+        raise HTTPException(status_code=400, detail="pais y zona no pueden estar vacíos")
+    if pais.upper() == "ARGENTINA":
+        raise HTTPException(status_code=400, detail="Argentina no se puede cargar acá -- tiene desglose doméstico interno (DTC/Buenos Aires/NOA/Interior), no una sola zona")
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO pais_zona_mapa (pais, zona) VALUES (?, ?)",
+            (pais, zona),
+        )
+        conn.commit()
+    except Exception:
+        conn.close()
+        raise HTTPException(status_code=409, detail=f"'{pais}' ya existe en la tabla")
+    conn.close()
+    return {"ok": True}
+
+
+@router.put("/pais-zona/{pais}")
+async def editar_pais_zona(pais: str, body: dict, admin=Depends(require_admin)):
+    zona = (body.get("zona") or "").strip()
+    if not zona:
+        raise HTTPException(status_code=400, detail="zona no puede estar vacía")
+    conn = get_db()
+    cur = conn.execute(
+        "UPDATE pais_zona_mapa SET zona = ? WHERE pais = ?",
+        (zona, pais),
+    )
+    conn.commit()
+    actualizado = cur.rowcount > 0
+    conn.close()
+    if not actualizado:
+        raise HTTPException(status_code=404, detail=f"No existe el país '{pais}' en el mapa de región")
+    return {"ok": True}
+
+
+@router.delete("/pais-zona/{pais}")
+async def borrar_pais_zona(pais: str, admin=Depends(require_admin)):
+    conn = get_db()
+    cur = conn.execute("DELETE FROM pais_zona_mapa WHERE pais = ?", (pais,))
+    conn.commit()
+    borrado = cur.rowcount > 0
+    conn.close()
+    if not borrado:
+        raise HTTPException(status_code=404, detail=f"No existe el país '{pais}' en el mapa de región")
+    return {"ok": True}

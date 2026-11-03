@@ -160,6 +160,25 @@ def init_db():
             agrupante TEXT NOT NULL
         )
     """)
+    # País -> Región (2026-11-03, mismo día, pedido explícito de Ezequiel:
+    # "quiero que crees una tabla en datos maestros que sea la regla para
+    # esta hoja [Alemania en EUROPE]... si ariel culasso quiere hacer un
+    # cambio de region en un pais lo va a poder editar desde datos
+    # maestros"). A diferencia de `region_agrupante_mapa` (agrupa los 11
+    # valores de zona YA ASIGNADOS por Redline), esta tabla reemplaza esa
+    # asignación -- `zona` (`d_zona_comercial`) viene hoy 100% crudo del
+    # ERP, ninguna regla nuestra decide que Alemania cae en "EUROPE"
+    # (confirmado en vivo 2026-11-03). Relevado también en vivo: de 31
+    # países reales, 30 mapean 1 a 1 a una sola zona -- Argentina es la
+    # ÚNICA excepción (4 zonas: DTC/BUENOS AIRES/NOA/INTERIOR, desglose
+    # doméstico interno, no tiene sentido "1 zona" ahí) -- Argentina
+    # queda FUERA de esta tabla a propósito, nunca se le aplica override.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pais_zona_mapa (
+            pais TEXT PRIMARY KEY,
+            zona TEXT NOT NULL
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS budget_detalle (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -371,6 +390,31 @@ def init_db():
         conn.executemany(
             "INSERT INTO region_agrupante_mapa (zona_comercial, agrupante) VALUES (?, ?)",
             zonas,
+        )
+        conn.commit()
+
+    # Semilla de pais_zona_mapa -- los 30 países reales (todo menos
+    # Argentina) relevados en vivo 2026-11-03 contra /api/ventas/panel,
+    # con la zona que YA les asigna Redline hoy -- arranca como un espejo
+    # exacto del dato crudo (0 cambios de comportamiento al desplegar),
+    # editable desde Datos Maestros de ahí en más.
+    (cantidad,) = conn.execute("SELECT COUNT(*) FROM pais_zona_mapa").fetchone()
+    if cantidad == 0:
+        paises = [
+            ("REINO UNIDO", "UK"), ("PAISES BAJOS", "EUROPE"), ("BELGICA", "EUROPE"),
+            ("COSTA RICA", "CARIBBEAN"), ("ESTADOS UNIDOS", "UNITED STATES"), ("BRASIL", "LATIN AMERICA"),
+            ("LETONIA", "EUROPE"), ("CANADA", "CANADA"), ("NORUEGA", "EUROPE"),
+            ("MEXICO", "CARIBBEAN"), ("PERU", "LATIN AMERICA"), ("ALEMANIA", "EUROPE"),
+            ("SUIZA", "EUROPE"), ("HONG KONG", "ASIA"), ("AUSTRIA", "EUROPE"),
+            ("KOREA", "ASIA"), ("FRANCIA", "EUROPE"), ("PUERTO RICO", "CARIBBEAN"),
+            ("HONDURAS", "CARIBBEAN"), ("GUATEMALA", "CARIBBEAN"), ("POLONIA", "EUROPE"),
+            ("AUSTRALIA", "ASIA"), ("ISRAEL", "ASIA"), ("COLOMBIA", "LATIN AMERICA"),
+            ("JAPON", "ASIA"), ("URUGUAY", "LATIN AMERICA"), ("ANTILLAS HOLANDESAS", "CARIBBEAN"),
+            ("PARAGUAY", "LATIN AMERICA"), ("UCRANIA", "EUROPE"), ("PANAMA", "CARIBBEAN"),
+        ]
+        conn.executemany(
+            "INSERT INTO pais_zona_mapa (pais, zona) VALUES (?, ?)",
+            paises,
         )
         conn.commit()
     conn.close()

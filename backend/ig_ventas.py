@@ -342,12 +342,26 @@ def _agregado_crudo_panel(desde: date, hasta_incl: date) -> dict[tuple, list[flo
     return agg
 
 
-def facts_panel_ventas(desde: date, hasta_incl: date) -> dict:
+def facts_panel_ventas(desde: date, hasta_incl: date, pais_zona_override: dict[str, str] | None = None) -> dict:
     """{dims, facts} para Panel de Ventas / Ventas por Región. `facts` es una
     lista de filas [cod_periodo, cod_mercado, ..., cod_cliente, usd, cajas,
     ars, mg] -- cada dimensión se codifica a un índice entero sobre la lista
     `dims[<nombre>]`, igual que el mock original, para que el frontend
     (app.js portado del mock) no tenga que cambiar.
+
+    `pais_zona_override` (2026-11-03, pedido explícito de Ezequiel: "quiero
+    que crees una tabla en datos maestros que sea la regla para esta hoja
+    [que Alemania entra en EUROPE]... si ariel culasso quiere hacer un
+    cambio de region en un pais lo va a poder editar desde datos
+    maestros"): `zona` (`d_zona_comercial`) viene 100% crudo del ERP --
+    ninguna regla nuestra decide que Alemania cae en "EUROPE" (confirmado
+    en vivo). Este dict opcional ({pais: zona}, de `datos_maestros.py::
+    get_pais_zona_map()`) REEMPLAZA la zona de cada fila según su país,
+    aplicado ACÁ (antes de codificar a `dims`/`facts`) para que corra para
+    Panel de Ventas, Ventas por Región y el Agrupante de Región a la vez,
+    sin tocar el cache de agregado crudo (`PANEL_AGG_CACHE` sigue
+    guardando la zona CRUDA -- el override se aplica fresco en cada
+    request, así que editar la tabla no requiere invalidar ningún cache).
 
     Performance (2026-10-08): el agregado de los meses YA CERRADOS no puede
     cambiar más (mismo criterio que el cache por-día de _fetch_dia -- ver
@@ -400,8 +414,14 @@ def facts_panel_ventas(desde: date, hasta_incl: date) -> dict:
             m[v] = len(m)
         return m[v]
 
+    idx_zona = DIMS_PANEL.index("zona")
+    idx_pais = DIMS_PANEL.index("pais")
     facts = []
     for k, v in agg_crudo.items():
+        if pais_zona_override:
+            nueva_zona = pais_zona_override.get(k[idx_pais])
+            if nueva_zona:
+                k = k[:idx_zona] + (nueva_zona,) + k[idx_zona + 1:]
         cods = [_code(d, val) for d, val in zip(DIMS_PANEL, k)]
         facts.append(cods + [round(x, 2) for x in v])
 
