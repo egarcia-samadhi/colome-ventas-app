@@ -1040,15 +1040,65 @@ en pantalla como fila naranja. Detalle completo en memoria de Claude,
 implementados, diagnosticados solamente -- ver memoria de Claude
 `proyecto_colome_ventas_pendientes_controles_budget_region` antes de
 arrancar cualquiera):**
-- Budget (`budget/page.tsx`) es un `<Placeholder>` -- nunca se construyó
-  pantalla real de lectura/edición, aunque el Budget SÍ se usa en vivo
-  (archivos estáticos `backend/budget_2026_2027.json`/
-  `budget_linea_2026_2027.json`, no editables desde la app).
 - "Región" (`zona` = `d_zona_comercial` crudo) no tiene agrupante en
   Datos Maestros, a diferencia de Canal/Marca.
 - Ventas por Región (el mapa) no muestra LY -- recomendación dada:
   agregarlo como una 4ta vista "Por Región" en Otros Análisis en vez de
   al mapa, para no complicar la lectura geográfica.
+
+## Budget: pantalla editable real (agregado 2026-11-03)
+
+Pedido explícito de Ezequiel: *"La hoja Budget no esta mostrando la tabla
+con el Budget actual cargado. La idea es que se lea y edite desde ahí"*.
+`budget/page.tsx` era literalmente un `<Placeholder>` -- nunca se
+construyó pantalla real, aunque el Budget SÍ se usa en vivo (Panel de
+Ventas, tabla comparativa; Sales Performance, Budget por línea). Los
+datos vivían en 2 archivos JSON estáticos committeados al repo
+(`budget_2026_2027.json`/`budget_linea_2026_2027.json`, fuente
+`Budget_Dinamico.xlsx` de Ariel), ilegibles/editables desde la app.
+
+- **`database.py`:** 2 tablas nuevas, `budget_mensual` (`periodo` PK,
+  `usd`, `cajas`) y `budget_linea_mensual` (`periodo`+`linea` PK
+  compuesta). Sembradas UNA sola vez desde esos mismos JSON en
+  `init_db()` -- los JSON quedan en el repo como fixture histórica, ya
+  no se leen en runtime.
+- **`budget.py`** (módulo nuevo): `get_budget_mensual()`/
+  `get_budget_linea_mensual()` (mismo shape de retorno que los JSON
+  originales, cache en memoria) + CRUD admin-only (`PUT /api/budget/
+  {periodo}`, `PUT /api/budget/{periodo}/linea/{linea}`, UPSERT).
+  `LINEAS_VALIDAS` = las 7 líneas fijas de `snap.py`
+  (`DTC_LINEAS_FIJAS` + Grupo Colome Domestic/Export).
+- **Invalidación de cache en cascada:** cada escritura llama
+  `snap.limpiar_snap_cache()` además de limpiar el cache propio -- el
+  Budget alimenta filas YA CACHEADAS de `ventas_sbl()` (`usd_bud`/
+  `lit_bud`, cacheadas en disco por `SNAP_RANGE_CACHE`, ver sección de
+  Sales Performance más abajo) -- sin esto, editar el Budget no se
+  reflejaría en Sales Performance hasta que cambiara el mes disponible.
+- **`snap.py`:** `_budget_mensual`/`_budget_linea_mensual` pasan a ser
+  imports directos de `budget.py` (`from budget import
+  get_budget_mensual as _budget_mensual`) -- mismo nombre de función a
+  nivel de módulo, CERO cambios en el resto de `snap.py`.
+- **`Dockerfile`:** `backend/budget.py` agregado al `COPY` explícito
+  (norma del proyecto -- un archivo nuevo que no se agrega ahí crashea
+  en runtime, ver gotcha de cache más abajo en este doc).
+- **Frontend (`budget/page.tsx`):** 1 tabla, 12 filas (períodos del
+  ejercicio 2026-2027), columnas Total + 7 líneas × (USD/Cajas9l) --
+  mismo patrón visual que la tabla pivot de Por Vendedor (Otros
+  Análisis). Edición inline: admin ve cada número como botón
+  clickeable que se vuelve `<input type="number">`, guarda solo al
+  perder foco (blur), sin botón "Guardar" aparte. Cajas9l con 2
+  decimales (`fmtCajas`).
+
+**Verificado:** smoke test local (`init_db()` siembra 12 meses, UPSERT
+de ambas tablas, `import snap` sin ciclo) + lectura real en producción
+(Total ejercicio = USD 10.556.951 / 185.062,75 cajas, coincide EXACTO
+con el "control" histórico de Ariel; `usd_bud` de octubre en `/api/
+ventas/snap` sin cambios). La escritura NO se probó en vivo -- el
+clasificador de seguridad bloqueó escribir un valor de prueba en
+producción (correcto, es un dato financiero real); la lógica UPSERT se
+validó solo contra una DB de prueba local.
+
+Detalle completo en memoria de Claude, `proyecto_colome_ventas_budget_editable`.
 
 ## Sales Performance: feedback visual + cache de SNAP (agregado 2026-11-03)
 
