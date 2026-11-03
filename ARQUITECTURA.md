@@ -600,6 +600,43 @@ Canal detallado, que sigue existiendo igual.
 Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_agrupante_canal`.
 
+## Filtro previo "Agrupante de Marca" en Panel de Ventas (agregado 2026-11-03)
+
+Pedido explícito de Ezequiel: el Panel de Ventas venía pre-filtrado tildando
+a mano todas las marcas menos FdelMotte -- mismo problema conceptual que el
+de Canal, resuelto con el mismo patrón: filtro PREVIO que agrupa los 5
+valores crudos de Brand (`d_rubro`, universo `GRUPO_VALIDO = "VINOS **"`)
+en 2 agrupantes ("Colomé & Amalaya" y "Familia del Monte"), SIN sacar el
+filtro de Brand detallado.
+
+- **Valores reales confirmados en vivo (2026-11-03):** `ALTURA MAXIMA **`,
+  `COLOME **`, `AMALAYA **` y `TERROTORIO **` (typo real del ERP, no es un
+  bug de la app) van a "Colomé & Amalaya"; `FDELMOTTE **` va a "Familia del
+  Monte".
+- **Catálogo:** `marca_agrupante_mapa` (`database.py`) -- 1 `brand` -> 1
+  `agrupante`, mismo criterio que `canal_agrupante_mapa` (catálogo fijo
+  editable a mano, no auto-sincronizado).
+- **Backend:** `panel_ventas.py::panel_ventas()` agrega
+  `dims["brand_agrupante"]` a `/api/ventas/panel` -- array paralelo a
+  `dims["brand"]`.
+- **Frontend (`app.js`):** sidebar agrega "Agrupante de Marca" ARRIBA de
+  "Brand", mismo mecanismo de chips que Agrupante de Canal. El default
+  histórico ("todo tildado menos FdelMotte") ahora sale del agrupante
+  "Familia del Monte" en vez de buscar el string "DELMOTTE" a mano
+  (`FDELMOTTE_IDX` eliminado). El botón "Limpiar filtros" ahora llama
+  `buildSidebar()` completo para que los chips de ambos agrupantes
+  (Canal y Marca) queden consistentes tras limpiar.
+- **Datos Maestros:** nueva pestaña "Agrupante de Marca"
+  (`frontend/src/app/datos-maestros/page.tsx::MarcaAgrupanteMapa`), mismo
+  patrón visual que Canal/Jurisdicción.
+- **Sin control de integridad dedicado** (a diferencia de Canal): con solo
+  5 valores fijos no se justificó agregar un chequeo "marcas sin
+  agrupante" de oficio -- si aparece una 6ta marca algún día, se clasifica
+  a mano desde Datos Maestros.
+
+Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_agrupante_marca`.
+
 ## Sales by Line of Business -> popup "Sales by Market" por línea (agregado 2026-10-21)
 
 Pedido explícito de Ezequiel: poder hacer clic en una línea de Sales by
