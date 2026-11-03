@@ -175,17 +175,10 @@ de Claude, `proyecto_colome_ventas_rediseno_por_cliente_ariel`.
 
 Durante la verificación en vivo del punto anterior, el tablero completo quedó inaccesible para todos los usuarios por varios minutos ("no carga el tablero directamente", "no anda el tablero"). Causa raíz: `ig_ventas.py::_fetch_dia_remoto` hace fetch SÍNCRONO (`urllib.request`) a la API externa de Redline dentro de un endpoint `async def` de FastAPI con un solo worker uvicorn -- mientras un request recorre un rango de fechas sin cachear (hasta ~30 días, con reintentos síncronos), bloquea el ÚNICO event loop del proceso para TODOS los requests, de cualquier usuario, de cualquier pantalla (confirmado en logs de Traefik: requests de 180s a 430s en `/`, `/otros-analisis/`, `/api/otros-analisis/por-vendedor`). Mitigado reiniciando el servicio (`docker service update --force colome_colome-ventas`) -- **el riesgo de fondo sigue vigente**, cualquier usuario real que pida un rango sin cachear puede repetirlo. Fix arquitectural pendiente (migrar el fetch a async/`run_in_executor`), no implementado todavía. Detalle completo en memoria de Claude, `proyecto_colome_ventas_outage_blocking_io_otros_analisis`.
 
-### Composición "por factura" en ventana flotante (2026-11-02, mismo día, pedido de Ezequiel)
+### Composición "por factura" en ventana flotante -- agregada 2026-11-02, SACADA del todo 2026-11-03
 
-*"por cliente, por sku y por vendedor, podremos mostrar la composicion en una ventana flotante?"* → *"por factura"*. Click en una fila/celda abre un popup con las facturas REALES que componen ese total -- mismo patrón que el popup "Sales by Market" de Sales Performance, acá a nivel factura.
+*"por cliente, por sku y por vendedor, podremos mostrar la composicion en una ventana flotante?"* → *"por factura"* (2026-11-02). Click en una fila/celda abría un popup con las facturas REALES que componían ese total. **El mismo día siguiente (2026-11-03) Ezequiel cambió de criterio en las 3 vistas** -- ver subsección de abajo, "Drill-down agregado (Marca/Producto o Cliente), no por factura": `ig_ventas.py::detalle_por_factura()`, el endpoint `/api/otros-analisis/detalle-facturas` y `ComposicionModal` (frontend) quedaron sin ningún consumidor y se sacaron DEL TODO del repo (no quedó código muerto). Si hace falta reconstruir ese patrón ("por factura"), está completo en el historial de git (commits del 2026-11-02) y en memoria de Claude, `proyecto_colome_ventas_composicion_por_factura`.
 
-- **Backend:** `ig_ventas.py::detalle_por_factura(desde, hasta_incl, cliente?, c_articulo?, vendedor?)` -- agrega por (comprobante, número, fecha), UNA fila por factura aunque tenga más de una línea dentro del filtro (los artículos se juntan en una celda, separados por coma). Endpoint `/api/otros-analisis/detalle-facturas`, filtros combinables.
-- **Frontend:** `ComposicionModal` -- overlay + tabla Fecha/Comprobante/(lo que no esté ya fijado por el filtro: Cliente, Vendedor o Artículo(s))/Cajas9l/Venta Neta/Descuento Comercial/% Desc. + total.
-  - Por SKU: click en el artículo → filtra por `c_articulo`.
-  - Por Vendedor: click en la celda "Venta Neta" de cada vendedor×artículo → filtra por `c_articulo`+`vendedor`.
-  - **Por Cliente NO usa este modal desde 2026-11-03** -- ver subsección propia más abajo, "Por Cliente: drill-down por Marca/Producto".
-
-Verificado en vivo y contra el backend directo (`docker exec`): click en un cliente top ($145.152.954) abrió el popup con exactamente 1 factura de exportación de 12 artículos, suma exacta. Detalle completo en memoria de Claude, `proyecto_colome_ventas_composicion_por_factura`.
 - **Gotcha de cache (recurrente, atención si se agrega un campo nuevo a
   `CAMPOS_USADOS`):** el cache por-día en disco (`/data/ig_ventas_cache`,
   persistente para siempre en meses cerrados) solo tiene las claves que
@@ -209,29 +202,43 @@ Verificado en vivo y contra el backend directo (`docker exec`): click en un clie
   cualquier usuario lo pida. Detalle completo en memoria de Claude
   `proyecto_colome_ventas_otros_analisis`.
 
-### Por Cliente: drill-down por Marca/Producto, no por factura (agregado 2026-11-03)
+### Drill-down agregado (Marca/Producto o Cliente), no por factura (agregado 2026-11-03)
 
-Pedido explícito de Ezequiel: *"el drill-down, no tiene que ser por
-factura, tiene que ser por marca - producto"*. Alcance SOLO Por Cliente --
-Por SKU y Por Vendedor siguen con `ComposicionModal` (composición por
-factura), sin tocar.
+3 pedidos de Ezequiel el mismo día, aplicados secuencialmente a las 3
+vistas: Por Cliente ("el drill-down, no tiene que ser por factura, tiene
+que ser por marca - producto"), Por SKU ("por sku, tenemos que aplicar el
+mismo criterio. el drill down es por cliente, no por factura") y Por
+Vendedor ("por ultimo, por vendedor, no hagas la apertura por factura" --
+el reemplazo concreto, "Desglose por Cliente" igual que Por SKU, se
+confirmó con el usuario antes de implementar, el pedido no lo
+especificaba).
 
-- **Backend:** `ig_ventas.py::ventas_cliente_por_marca_producto(desde,
+- **Por Cliente → Marca/Producto:** `ig_ventas.py::ventas_cliente_por_marca_producto(desde,
   hasta_incl, cliente)` -- agrega `_lineas_vinos()` filtrado a UN cliente
-  por (Marca=`d_rubro`, `c_articulo`, `d_articulo`). Mismo campo real de
-  descuento (`m_desc_total`) y mismo `mg_pct` que `ventas_por_sku`.
-  Endpoint `GET /api/otros-analisis/por-cliente/marca-producto?desde=&hasta=&cliente=`.
-- **Frontend:** `DesgloseMarcaProductoModal` (nuevo, reemplaza
-  `ComposicionModal` SOLO en `PorCliente`) -- mismo criterio visual que la
-  tabla de Por SKU: Marca/Producto/Cajas9l/Venta Neta/Descuento
-  Comercial/% Desc./Precio Promedio, ordenado por Venta Neta desc, fila
-  de Total.
+  por (Marca=`d_rubro`, `c_articulo`, `d_articulo`). Endpoint `GET
+  /api/otros-analisis/por-cliente/marca-producto?desde=&hasta=&cliente=`.
+  Frontend: `DesgloseMarcaProductoModal` -- Marca/Producto/Cajas9l/Venta
+  Neta/Descuento Comercial/% Desc./Precio Promedio (mismo criterio visual
+  que la tabla de Por SKU).
+- **Por SKU y Por Vendedor → Cliente:** `ig_ventas.py::ventas_producto_por_cliente(desde,
+  hasta_incl, c_articulo, *, vendedor=None)` -- agrega por cliente
+  filtrado a 1 `c_articulo` (+ opcionalmente 1 `vendedor`, para la celda
+  vendedor×artículo del pivot de Por Vendedor). Endpoint `GET
+  /api/otros-analisis/por-sku/cliente?desde=&hasta=&c_articulo=&vendedor=`
+  (reusado por las 2 vistas). Frontend: `DesgloseClienteModal` --
+  Cliente/Cajas9l/Venta Neta/Descuento Comercial/% Desc.
+- Mismo campo real de descuento (`m_desc_total`) y mismo criterio de
+  `mg_pct` que `ventas_por_sku` en las 2 funciones nuevas.
 
-Verificado en vivo (Claude-en-Chrome): click en "MIRAFLORES SRL" (oct-2026,
-cliente con descuento real) abrió el desglose con AMALAYA/COLOME/ALTURA
-MAXIMA por producto, %Desc fila por fila coherente con el 60.4% ya
-mostrado en el ranking de Por Cliente. Detalle completo en memoria de
-Claude, `proyecto_colome_ventas_drilldown_cliente_marca_producto`.
+Verificado en vivo (Claude-en-Chrome), las 3 vistas: Por Cliente, click en
+"MIRAFLORES SRL" abrió AMALAYA/COLOME/ALTURA MAXIMA por producto (%Desc
+58-65%, coherente con el 60.4% del ranking). Por SKU, click en "AMALAYA
+MALBEC" abrió el desglose por cliente (MIRAFLORES SRL 61.8%, consistente
+con lo anterior). Por Vendedor, click en la celda Venta Neta de "ALTURA
+MAXIMA MALBEC"×"ANA MOUNIER" abrió el desglose con 3 clientes, Total
+$891.956 coincide EXACTO con la celda original de la tabla pivot. Detalle
+completo en memoria de Claude,
+`proyecto_colome_ventas_drilldown_cliente_marca_producto`.
 
 ### Columna "% Descuento" en las 4 tablas con Descuento Comercial (agregado 2026-11-03)
 
@@ -243,9 +250,11 @@ descuento / (ars + descuento)`. Helper `fmtPct(descuento, ars)` en
 `otros-analisis/page.tsx`, 100% frontend (no se tocó `ig_ventas.py`/
 `otros_analisis.py` -- `ars`/`descuento` ya viajaban en cada fila).
 Columna agregada en Por Cliente, Por SKU, Por Vendedor (pivot -- 4ta
-sub-columna por vendedor, `colSpan` por vendedor pasó de 3 a 4) y el popup
-`ComposicionModal`. No es ordenable (header plano, no `SortTh`) -- no se
-pidió. Detalle completo en memoria de Claude,
+sub-columna por vendedor, `colSpan` por vendedor pasó de 3 a 4) y los
+popups de composición por factura que existían en ese momento (desde
+2026-11-03 son los popups de drill-down agregado, ver subsección de
+arriba). No es ordenable (header plano, no `SortTh`) -- no se pidió.
+Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_pct_descuento_otros_analisis`.
 
 ## SNAP -> Sales by Line of Business (agregado 2026-10-19)
