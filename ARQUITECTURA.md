@@ -249,6 +249,16 @@ especificaba).
   (`DesgloseMarcaProductoModal` y `DesgloseClienteModal`) -- las tablas
   principales siguen con `fmtNum`, ahí `cajas` ya viene agregado a nivel
   producto completo.
+- **3er pedido, mismo día** (Ezequiel, citando el subtítulo de la
+  pantalla: "sigue sin reemplazar cant. por caja de 9"): el fix #2 solo
+  tocó los popups -- la tabla PRINCIPAL de Por Vendedor seguía con su
+  columna histórica "Cant." (`cantidad`, unidades sueltas), porque
+  `ventas_por_vendedor()` nunca agregaba `cajas9l` (a diferencia de
+  `ventas_por_cliente`/`ventas_por_sku`). Fix: `ventas_por_vendedor()`
+  ahora agrega también `cantidad_cajas9l` (campo `cajas`, `cantidad` se
+  deja en la respuesta por compatibilidad pero ya no se consume en el
+  frontend). La sub-columna por vendedor pasa de "Cant." a "Caja de 9"
+  (`fmtCajas`, 2 decimales).
 
 Verificado en vivo (Claude-en-Chrome), las 3 vistas: Por Cliente, click en
 "MIRAFLORES SRL" abrió AMALAYA/COLOME/ALTURA MAXIMA por producto (%Desc
