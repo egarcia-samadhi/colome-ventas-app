@@ -1139,6 +1139,32 @@ el clasificador de seguridad ("Out-of-Place Publication") -- publicar
 sensible que un cambio de código común. Se pidió confirmación
 explícita antes de pushear.
 
+### Bug real: faltaban columnas + Período invisible en el Detalle
+
+Ezequiel: *"estoy mirando la hoja detalle sku, y si lo comparo con la
+hoja datos del excel, me falta un monton de informacion, lo mas grave
+es que detalle sku ninguna linea tiene periodo"*. Investigado antes de
+tocar código: el período SÍ estaba guardado correctamente en
+`budget_detalle` (verificado en vivo vía fetch directo) -- el
+problema real era que la tabla nunca lo mostraba como COLUMNA, solo lo
+usaba como filtro invisible. Aparte, la 1ra carga solo había extraído
+6 de las 14 columnas reales de la hoja "Datos" (faltaban Mes, Código,
+Descripción, Bloque, Medida, Pesos, TC) -- pérdida de información real.
+
+- `budget_detalle_2026_2027.json` regenerado con las 14 columnas
+  (totales re-verificados sin cambios).
+- `database.py`: migración de la DB ya desplegada vía `ALTER TABLE ADD
+  COLUMN` + backfill por posición (`id` 1..2329 == orden del JSON) --
+  NUNCA toca `cajas`/`usd`. Verificado con script de prueba aislado
+  que una edición preexistente sobrevive la migración intacta.
+- Frontend: tabla de Detalle ahora muestra "Período" y "Código" como
+  columnas visibles por fila.
+
+**Gotcha de testing:** en este entorno (Windows + git-bash + Python
+nativo), `VAR=valor python -c "..."` no propaga confiablemente la env
+var al proceso -- usar un archivo `.py` real con `os.environ[...]`
+seteado antes de importar el módulo que la lee a nivel de módulo.
+
 ### 3ra vuelta, mismo día: 2 pestañas separadas
 
 Ezequiel: *"hacelo en 2 pestañas separadas"* -- Total/Por Línea y Detalle
