@@ -1,5 +1,7 @@
+import json
 import os
 import sqlite3
+from pathlib import Path
 
 DB_PATH = os.environ.get("DB_PATH", "/data/colome-ventas.db")
 
@@ -100,6 +102,31 @@ def init_db():
             agrupante TEXT NOT NULL
         )
     """)
+    # Budget (2026-11-03, pedido explícito de Ezequiel: "la hoja Budget no
+    # esta mostrando la tabla con el Budget actual cargado. La idea es que
+    # se lea y edite desde ahí") -- antes vivía en 2 archivos JSON estáticos
+    # committeados al repo (`budget_2026_2027.json`/
+    # `budget_linea_2026_2027.json`, fuente Budget_Dinamico.xlsx de Ariel,
+    # ver snap.py), ilegibles/editables desde la app. Se migran a estas 2
+    # tablas, sembradas UNA sola vez desde esos mismos JSON más abajo --
+    # de ahí en más la edición es siempre vía `budget.py` (API), nunca
+    # tocando los JSON (que quedan como fixture histórica, no se borran).
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS budget_mensual (
+            periodo TEXT PRIMARY KEY,
+            usd REAL NOT NULL,
+            cajas REAL NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS budget_linea_mensual (
+            periodo TEXT NOT NULL,
+            linea TEXT NOT NULL,
+            usd REAL NOT NULL,
+            cajas REAL NOT NULL,
+            PRIMARY KEY (periodo, linea)
+        )
+    """)
     conn.commit()
 
     # Semilla fija (2026-10-07, pedido explícito de Ezequiel: "tiene que ser
@@ -192,4 +219,37 @@ def init_db():
             marcas,
         )
         conn.commit()
+
+    # Semilla de budget_mensual/budget_linea_mensual -- vuelca los JSON
+    # estáticos existentes (`backend/budget_2026_2027.json`/
+    # `backend/budget_linea_2026_2027.json`) UNA sola vez si las tablas
+    # están vacías. Esos archivos quedan en el repo como fixture histórica
+    # (de dónde salió el dato original), pero de acá en más la fuente de
+    # verdad en producción es la DB.
+    (cantidad,) = conn.execute("SELECT COUNT(*) FROM budget_mensual").fetchone()
+    if cantidad == 0:
+        ruta = Path(__file__).parent / "budget_2026_2027.json"
+        if ruta.exists():
+            data = json.loads(ruta.read_text(encoding="utf-8"))
+            conn.executemany(
+                "INSERT INTO budget_mensual (periodo, usd, cajas) VALUES (?, ?, ?)",
+                [(p, v[0], v[1]) for p, v in data.items()],
+            )
+            conn.commit()
+
+    (cantidad,) = conn.execute("SELECT COUNT(*) FROM budget_linea_mensual").fetchone()
+    if cantidad == 0:
+        ruta = Path(__file__).parent / "budget_linea_2026_2027.json"
+        if ruta.exists():
+            data = json.loads(ruta.read_text(encoding="utf-8"))
+            filas = [
+                (periodo, linea, v[0], v[1])
+                for periodo, lineas in data.items()
+                for linea, v in lineas.items()
+            ]
+            conn.executemany(
+                "INSERT INTO budget_linea_mensual (periodo, linea, usd, cajas) VALUES (?, ?, ?, ?)",
+                filas,
+            )
+            conn.commit()
     conn.close()

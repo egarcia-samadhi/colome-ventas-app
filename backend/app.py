@@ -83,6 +83,7 @@ from panel_ventas import router as panel_ventas_router
 from otros_analisis import router as otros_analisis_router
 from auditoria import router as auditoria_router
 from snap import router as snap_router
+from budget import router as budget_router
 
 init_db()
 app.include_router(afip_router)
@@ -93,6 +94,7 @@ app.include_router(panel_ventas_router)
 app.include_router(otros_analisis_router)
 app.include_router(auditoria_router)
 app.include_router(snap_router)
+app.include_router(budget_router)
 
 
 @app.get("/{path:path}")

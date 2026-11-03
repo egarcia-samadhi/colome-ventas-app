@@ -191,16 +191,15 @@ def _lfy_agregado() -> dict[tuple[str, str], list[float]]:
 # jun-2027). Se reextrajo mapeando Nro_Mes directo a 2026-07..2027-06
 # (ignorando el campo `Año_Fiscal` del archivo, que quedó desfasado un
 # año). Esto SÍ cubre el ejercicio actual -- no hace falta esperar otro
-# presupuesto."""
-BUDGET_RUTA = Path(__file__).parent / "budget_2026_2027.json"
-_budget_cache: dict[str, list[float]] | None = None
-
-
-def _budget_mensual() -> dict[str, list[float]]:
-    global _budget_cache
-    if _budget_cache is None:
-        _budget_cache = json.loads(BUDGET_RUTA.read_text(encoding="utf-8"))
-    return _budget_cache
+# presupuesto.
+#
+# MIGRADO a DB 2026-11-03 (ver budget.py): el JSON de acá abajo
+# (`budget_2026_2027.json`) queda como fixture histórica de dónde salió
+# el dato original, pero `_budget_mensual` ya no lo lee -- lee
+# `budget.get_budget_mensual()`, que a su vez lee la tabla `budget_mensual`
+# (sembrada desde ESE MISMO JSON una sola vez, ver database.py). Mismo
+# shape de retorno, ningún otro call site de este archivo cambió."""
+from budget import get_budget_mensual as _budget_mensual
 
 
 # Budget POR LÍNEA de negocio (agregado 2026-11-02, Ezequiel: "en el snap
@@ -235,15 +234,10 @@ def _budget_mensual() -> dict[str, list[float]]:
 # Nro_Mes del archivo mapeado directo a 2026-07..2027-06 (mismo criterio
 # que `_budget_mensual`, el campo `Año_Fiscal` del archivo está mal
 # etiquetado como "2025-2026").
-BUDGET_LINEA_RUTA = Path(__file__).parent / "budget_linea_2026_2027.json"
-_budget_linea_cache: dict[str, dict[str, list[float]]] | None = None
-
-
-def _budget_linea_mensual() -> dict[str, dict[str, list[float]]]:
-    global _budget_linea_cache
-    if _budget_linea_cache is None:
-        _budget_linea_cache = json.loads(BUDGET_LINEA_RUTA.read_text(encoding="utf-8"))
-    return _budget_linea_cache
+#
+# MIGRADO a DB 2026-11-03, mismo criterio que `_budget_mensual` arriba --
+# lee `budget.get_budget_linea_mensual()` en vez del JSON directo.
+from budget import get_budget_linea_mensual as _budget_linea_mensual
 
 
 def _agregado_budget_linea(desde: date, hasta_incl: date) -> dict[str, list[float]] | None:
