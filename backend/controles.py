@@ -34,6 +34,18 @@ def require_admin(request: Request):
     return session
 
 
+def _ultimo_mes_cerrado() -> tuple[date, date]:
+    """Último mes calendario YA CERRADO (el actual todavía puede recibir
+    comprobantes) -- mismo criterio que `_mes_cerrado_anterior()` en
+    snap.py, duplicado acá liviano para no importar snap.py desde
+    controles.py."""
+    hoy = date.today()
+    anio, mes = (hoy.year, hoy.month - 1) if hoy.month > 1 else (hoy.year - 1, 12)
+    desde = date(anio, mes, 1)
+    hasta_excl = date(anio, mes + 1, 1) if mes < 12 else date(anio + 1, 1, 1)
+    return desde, hasta_excl - timedelta(days=1)
+
+
 def _rango_a_chequear() -> tuple[date, date]:
     """Mismo rango que ya usa el Cruce AFIP (todos los períodos cargados en
     Info AFIP) -- reutiliza lo que ya está cacheado en disco en vez de pedir
@@ -69,6 +81,24 @@ async def controles(admin=Depends(require_admin)):
     # semáforo con el detalle de qué moneda no cierra.
     cruce = calcular_cruce()
     cruce_ok = cruce["tiene_datos_afip"] and all(d["ok"] for d in cruce["detalle"])
+
+    # Mes cerrado sin Info AFIP cargada todavía (2026-11-03, bug real
+    # reportado por Ezequiel: "cruce afip no esta pidiendo la info de
+    # octubre, esta controlando a octubre a pesar que ya estamos en
+    # noviembre y cerró octubre"). Causa: `_rango_a_chequear()` arma el
+    # rango a controlar leyendo MIN/MAX(periodo) de `afip_comprobantes` --
+    # depende de lo que YA se subió a mano a Info AFIP, no del calendario.
+    # Si nadie carga el export del mes recién cerrado, el control se queda
+    # "Al día" hasta el último mes SÍ cargado, en silencio, sin avisar que
+    # falta uno nuevo. Acá se compara el fin del rango ya cargado
+    # (`hasta_incl`, calculado arriba) contra el fin del último mes
+    # calendario cerrado -- si el cargado se quedó atrás, el control pasa
+    # a "no ok" con el período puntual que falta, aunque el cruce en sí
+    # (sobre lo que SÍ está cargado) cierre bien.
+    _, ultimo_cerrado_fin = _ultimo_mes_cerrado()
+    mes_afip_pendiente = cruce["tiene_datos_afip"] and hasta_incl < ultimo_cerrado_fin
+    periodo_pendiente = f"{ultimo_cerrado_fin.year:04d}-{ultimo_cerrado_fin.month:02d}"
+    cruce_ok = cruce_ok and not mes_afip_pendiente
 
     # Control 2: Jurisdicciones sin clasificar -- cualquier n_provincia de
     # ig_ventas que todavía no está en jurisdiccion_mapa (Datos Maestros)
@@ -107,7 +137,12 @@ async def controles(admin=Depends(require_admin)):
                 if not cruce["tiene_datos_afip"]
                 else "Al día" if cruce_ok
                 else "; ".join(
-                    f'{d["moneda"]} dif. {d["diferencia"]:,.2f}' for d in cruce["detalle"] if not d["ok"]
+                    (
+                        [f"Falta cargar Info AFIP de {periodo_pendiente} (ya cerrado)"]
+                        if mes_afip_pendiente else []
+                    ) + [
+                        f'{d["moneda"]} dif. {d["diferencia"]:,.2f}' for d in cruce["detalle"] if not d["ok"]
+                    ]
                 )
             ),
         },
