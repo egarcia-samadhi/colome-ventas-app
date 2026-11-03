@@ -69,6 +69,19 @@ interface FilaVendedor { rubro: string; c_articulo: string; d_articulo: string; 
 const fmtNum = (n: number) =>
   n === 0 ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
+// % Descuento Comercial (2026-11-03, pedido explícito de Ezequiel: "en
+// todas las tablas que pusimos descuento comercial, debemos agregar una
+// columna con el % de descuento") -- `ars` (venta neta, `valor_mon_loc`)
+// ya viene DESPUÉS de aplicar el descuento, así que venta bruta = ars +
+// descuento, y %Desc = descuento / (ars + descuento). Puramente derivado
+// en el frontend a partir de 2 campos que el backend ya manda, no hace
+// falta tocar ig_ventas.py/otros_analisis.py.
+const fmtPct = (descuento: number, ars: number) => {
+  const bruto = ars + descuento;
+  if (!bruto) return "—";
+  return (descuento / bruto * 100).toLocaleString("es-AR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+};
+
 function mesCerradoAnteriorRango(): { desde: string; hasta: string } {
   const hoy = new Date();
   const anio = hoy.getMonth() === 0 ? hoy.getFullYear() - 1 : hoy.getFullYear();
@@ -299,11 +312,12 @@ function ComposicionModal({ titulo, desde, hasta, filtro, onClose }: {
                   <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cajas9l</th>
                   <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
                   <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Desc. Comercial</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">% Desc.</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={8} className="py-10 text-center text-[#847c68]">Sin facturas para este filtro</td></tr>
+                  <tr><td colSpan={9} className="py-10 text-center text-[#847c68]">Sin facturas para este filtro</td></tr>
                 ) : (
                   <>
                     {rows.map((f) => (
@@ -316,6 +330,7 @@ function ComposicionModal({ titulo, desde, hasta, filtro, onClose }: {
                         <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas)}</td>
                         <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
                         <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.descuento)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(f.descuento, f.ars)}</td>
                       </tr>
                     ))}
                     <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
@@ -323,6 +338,7 @@ function ComposicionModal({ titulo, desde, hasta, filtro, onClose }: {
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.cajas)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.ars)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.descuento)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(total.descuento, total.ars)}</td>
                     </tr>
                   </>
                 )}
@@ -470,11 +486,12 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
                 <SortTh label="Cantidad" col="cantidad" sort={sort} onSort={onSort} />
                 <SortTh label="Venta Neta" col="ars" sort={sort} onSort={onSort} />
                 <SortTh label="Descuento Comercial" col="descuento" sort={sort} onSort={onSort} />
+                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">% Desc.</th>
               </tr>
             </thead>
             <tbody>
               {ranking.length === 0 ? (
-                <tr><td colSpan={6} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
+                <tr><td colSpan={7} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
               ) : (
                 <>
                   {ranking.map((f, i) => (
@@ -487,6 +504,7 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cantidad)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.descuento)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(f.descuento, f.ars)}</td>
                     </tr>
                   ))}
                   <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
@@ -495,6 +513,7 @@ function PorCliente({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) 
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.cantidad)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.ars)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.descuento)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(total.descuento, total.ars)}</td>
                   </tr>
                 </>
               )}
@@ -616,12 +635,13 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
                 <SortTh label="Cajas9l" col="cajas" sort={sort} onSort={onSort} />
                 <SortTh label="Venta Neta" col="ars" sort={sort} onSort={onSort} />
                 <SortTh label="Descuento Comercial" col="descuento" sort={sort} onSort={onSort} />
+                <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">% Desc.</th>
                 <SortTh label="Precio Promedio (por Caja9l)" col="precioProm" sort={sort} onSort={onSort} />
               </tr>
             </thead>
             <tbody>
               {ranking.length === 0 ? (
-                <tr><td colSpan={6} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
+                <tr><td colSpan={7} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
               ) : (
                 <>
                   {ranking.map((f, i) => (
@@ -633,6 +653,7 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.descuento)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(f.descuento, f.ars)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{f.cajas ? fmtNum(f.ars / f.cajas) : "—"}</td>
                     </tr>
                   ))}
@@ -641,6 +662,7 @@ function PorSku({ onFiltros }: { onFiltros: (n: React.ReactNode) => void }) {
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.cajas)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.ars)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.descuento)}</td>
+                    <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(total.descuento, total.ars)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{total.cajas ? fmtNum(total.ars / total.cajas) : "—"}</td>
                   </tr>
                 </>
@@ -821,7 +843,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                   <SortTh label="Rubro" col="rubro" sort={sort} onSort={onSort} align="left" rowSpan={2} className="align-bottom whitespace-nowrap" />
                   <SortTh label="Artículo" col="d_articulo" sort={sort} onSort={onSort} align="left" rowSpan={2} className="align-bottom whitespace-nowrap border-l border-[#ece6d8]" />
                   {vendedores.map((v) => (
-                    <th key={v} colSpan={3} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8] whitespace-nowrap">{v}</th>
+                    <th key={v} colSpan={4} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8] whitespace-nowrap">{v}</th>
                   ))}
                   <th colSpan={1} className="py-1.5 px-3 text-center text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] border-l border-[#ece6d8]">Total</th>
                 </tr>
@@ -831,6 +853,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                       <SortTh label="Cant." col={colVendedor(v, "cantidad")} sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68] border-l border-[#ece6d8]" />
                       <SortTh label="Venta Neta" col={colVendedor(v, "ars")} sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68]" />
                       <SortTh label="Desc. Com." col={colVendedor(v, "descuento")} sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68]" />
+                      <th className="py-1.5 px-3 text-right text-[10px] text-[#847c68] whitespace-nowrap">% Desc.</th>
                     </Fragment>
                   ))}
                   <SortTh label="Venta Neta" col="totalArs" sort={sort} onSort={onSort} className="!text-[10px] !normal-case !tracking-normal !font-normal text-[#847c68] border-l border-[#ece6d8]" />
@@ -838,7 +861,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
               </thead>
               <tbody>
                 {grupos.length === 0 ? (
-                  <tr><td colSpan={3 + vendedores.length * 3} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
+                  <tr><td colSpan={3 + vendedores.length * 4} className="py-12 text-center text-[#847c68]">Sin datos para este período</td></tr>
                 ) : grupos.map((g) => (
                   <Fragment key={g.rubro}>
                     {g.filas.map((f, i) => (
@@ -858,6 +881,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                                 ) : "—"}
                               </td>
                               <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.descuento) : "—"}</td>
+                              <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtPct(val.descuento, val.ars) : "—"}</td>
                             </Fragment>
                           );
                         })}
@@ -873,6 +897,7 @@ function PorVendedor({ onFiltros }: { onFiltros: (n: React.ReactNode) => void })
                             <td className="py-1.5 px-3 text-right tabular-nums border-l border-[#ece6d8]">{val ? fmtNum(val.cantidad) : "—"}</td>
                             <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.ars) : "—"}</td>
                             <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtNum(val.descuento) : "—"}</td>
+                            <td className="py-1.5 px-3 text-right tabular-nums">{val ? fmtPct(val.descuento, val.ars) : "—"}</td>
                           </Fragment>
                         );
                       })}
