@@ -45,11 +45,18 @@ interface FilaBudget {
 interface FilaDetalle {
   id: number;
   periodo: string;
+  mes: string | null;
   sku: string;
+  codigo: string | null;
+  descripcion: string | null;
   canal: string;
   mercado: string;
+  bloque: string | null;
+  medida: string | null;
   cajas: number;
   usd: number;
+  pesos: number | null;
+  tc: number | null;
 }
 
 function TablaResumen({ lineas, filas }: { lineas: string[]; filas: FilaBudget[] }) {
@@ -133,6 +140,8 @@ function FilaDetalleEditable({ fila, puedeEditar, onGuardado }: {
   if (!editando) {
     return (
       <tr className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
+        <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{labelPeriodo(fila.periodo)}</td>
+        <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{fila.codigo}</td>
         <td className="py-1.5 px-3 text-[#1c1811]">{fila.sku}</td>
         <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{fila.canal}</td>
         <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{fila.mercado}</td>
@@ -148,6 +157,8 @@ function FilaDetalleEditable({ fila, puedeEditar, onGuardado }: {
   }
   return (
     <tr className="border-t border-[#d9b38c] bg-[#fdf3ea]">
+      <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{labelPeriodo(fila.periodo)}</td>
+      <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{fila.codigo}</td>
       <td className="py-1.5 px-3 text-[#1c1811]">{fila.sku}</td>
       <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{fila.canal}</td>
       <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{fila.mercado}</td>
@@ -254,6 +265,8 @@ function SeccionDetalle({ periodos, puedeEditar, onCambio }: {
           <table className="w-full text-sm">
             <thead className="sticky top-0">
               <tr className="bg-[#f7f5f0]">
+                <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342] whitespace-nowrap">Período</th>
+                <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Código</th>
                 <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">SKU</th>
                 <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Canal</th>
                 <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Mercado</th>
@@ -264,14 +277,14 @@ function SeccionDetalle({ periodos, puedeEditar, onCambio }: {
             </thead>
             <tbody>
               {filtradas.length === 0 ? (
-                <tr><td colSpan={puedeEditar ? 6 : 5} className="py-12 text-center text-[#847c68]">Sin filas para este período/búsqueda</td></tr>
+                <tr><td colSpan={puedeEditar ? 8 : 7} className="py-12 text-center text-[#847c68]">Sin filas para este período/búsqueda</td></tr>
               ) : (
                 <>
                   {filtradas.map((f) => (
                     <FilaDetalleEditable key={f.id} fila={f} puedeEditar={puedeEditar} onGuardado={guardarFila} />
                   ))}
                   <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
-                    <td className="py-1.5 px-3" colSpan={3}>Total ({filtradas.length} filas)</td>
+                    <td className="py-1.5 px-3" colSpan={5}>Total ({filtradas.length} filas)</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtCajas(total.cajas)}</td>
                     <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.usd)}</td>
                     {puedeEditar && <td />}

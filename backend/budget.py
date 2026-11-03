@@ -162,14 +162,15 @@ async def listar_budget(user=Depends(require_reader)):
 @router.get("/detalle")
 async def listar_budget_detalle(periodo: str | None = Query(None), user=Depends(require_reader)):
     conn = get_db()
+    campos = "id, periodo, mes, sku, codigo, descripcion, canal, mercado, bloque, medida, cajas, usd, pesos, tc"
     if periodo:
         rows = conn.execute(
-            "SELECT id, periodo, sku, canal, mercado, cajas, usd FROM budget_detalle WHERE periodo = ? ORDER BY sku, canal, mercado",
+            f"SELECT {campos} FROM budget_detalle WHERE periodo = ? ORDER BY sku, canal, mercado",
             (periodo,),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT id, periodo, sku, canal, mercado, cajas, usd FROM budget_detalle ORDER BY periodo, sku, canal, mercado"
+            f"SELECT {campos} FROM budget_detalle ORDER BY periodo, sku, canal, mercado"
         ).fetchall()
     conn.close()
     return {"rows": [dict(r) for r in rows]}

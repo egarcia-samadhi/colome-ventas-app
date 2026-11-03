@@ -144,17 +144,53 @@ def init_db():
     # `budget_detalle`, para que nunca puedan desincronizarse Total/Línea
     # vs. el detalle por SKU (mismo criterio que "no podemos usar fuentes
     # distintas", ver snap.py).
+    # Panel de Ventas -> filtro previo "Agrupante de Región" (2026-11-03,
+    # pedido explícito de Ezequiel: "las regiones no estan diagramadas y
+    # configuradas mediante datos maestros") -- mismo patrón que
+    # canal_agrupante_mapa/marca_agrupante_mapa: catálogo fijo editable a
+    # mano, 1 zona_comercial (`d_zona_comercial` crudo de Redline) -> 1
+    # agrupante. 11 valores reales relevados en vivo 2026-11-03 (NO
+    # inventados): DTC, BUENOS AIRES, NOA, INTERIOR, UK, EUROPE, CARIBBEAN,
+    # UNITED STATES, LATIN AMERICA, CANADA, ASIA -- agrupados en Doméstico/
+    # Exportación, mismo criterio que ya usa Budget/SNAP (Grupo Colome
+    # Domestic/Export).
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS region_agrupante_mapa (
+            zona_comercial TEXT PRIMARY KEY,
+            agrupante TEXT NOT NULL
+        )
+    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS budget_detalle (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             periodo TEXT NOT NULL,
+            mes TEXT,
             sku TEXT NOT NULL,
+            codigo TEXT,
+            descripcion TEXT,
             canal TEXT NOT NULL,
             mercado TEXT NOT NULL,
+            bloque TEXT,
+            medida TEXT,
             cajas REAL NOT NULL,
-            usd REAL NOT NULL
+            usd REAL NOT NULL,
+            pesos REAL,
+            tc REAL
         )
     """)
+    conn.commit()
+
+    # Migración 2026-11-03 (mismo día, Ezequiel: "si lo comparo con la hoja
+    # datos del excel, me falta un monton de informacion" -- la 1ra carga
+    # de budget_detalle solo guardaba 6 de las 14 columnas reales de la
+    # hoja "Datos"). Agrega las columnas que falten en una DB ya existente
+    # (CREATE TABLE de arriba ya las define para una DB nueva, esto es solo
+    # para la que ya estaba desplegada) -- nunca toca `cajas`/`usd`, que
+    # pueden tener ediciones reales ya hechas desde la pantalla.
+    columnas_existentes = {r["name"] for r in conn.execute("PRAGMA table_info(budget_detalle)").fetchall()}
+    for columna, tipo in [("mes", "TEXT"), ("codigo", "TEXT"), ("descripcion", "TEXT"), ("bloque", "TEXT"), ("medida", "TEXT"), ("pesos", "REAL"), ("tc", "REAL")]:
+        if columna not in columnas_existentes:
+            conn.execute(f"ALTER TABLE budget_detalle ADD COLUMN {columna} {tipo}")
     conn.commit()
 
     # Semilla fija (2026-10-07, pedido explícito de Ezequiel: "tiene que ser
@@ -286,13 +322,55 @@ def init_db():
     # extraídas con el período calculado) UNA sola vez si la tabla está
     # vacía.
     (cantidad,) = conn.execute("SELECT COUNT(*) FROM budget_detalle").fetchone()
+    ruta_detalle = Path(__file__).parent / "budget_detalle_2026_2027.json"
     if cantidad == 0:
-        ruta = Path(__file__).parent / "budget_detalle_2026_2027.json"
-        if ruta.exists():
-            data = json.loads(ruta.read_text(encoding="utf-8"))
+        if ruta_detalle.exists():
+            data = json.loads(ruta_detalle.read_text(encoding="utf-8"))
             conn.executemany(
-                "INSERT INTO budget_detalle (periodo, sku, canal, mercado, cajas, usd) VALUES (?, ?, ?, ?, ?, ?)",
-                [(r["periodo"], r["sku"], r["canal"], r["mercado"], r["cajas"], r["usd"]) for r in data],
+                "INSERT INTO budget_detalle (periodo, mes, sku, codigo, descripcion, canal, mercado, bloque, medida, cajas, usd, pesos, tc) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [(r["periodo"], r["mes"], r["sku"], r["codigo"], r["descripcion"], r["canal"], r["mercado"],
+                  r["bloque"], r["medida"], r["cajas"], r["usd"], r["pesos"], r["tc"]) for r in data],
             )
             conn.commit()
+    else:
+        # Backfill de las columnas agregadas en la migración de arriba --
+        # DB ya desplegada con las 2.329 filas pero sin mes/codigo/
+        # descripcion/bloque/medida/pesos/tc. Empareja por POSICIÓN (`id`
+        # autoincrement 1..2329 == orden del JSON, mismo `for r in rows`
+        # con el que se sembró originalmente) -- NUNCA toca cajas/usd, que
+        # pueden tener ediciones reales ya hechas desde la pantalla Budget.
+        (faltan,) = conn.execute("SELECT COUNT(*) FROM budget_detalle WHERE codigo IS NULL").fetchone()
+        if faltan > 0 and ruta_detalle.exists():
+            data = json.loads(ruta_detalle.read_text(encoding="utf-8"))
+            conn.executemany(
+                "UPDATE budget_detalle SET mes=?, codigo=?, descripcion=?, bloque=?, medida=?, pesos=?, tc=? "
+                "WHERE id=? AND codigo IS NULL",
+                [(r["mes"], r["codigo"], r["descripcion"], r["bloque"], r["medida"], r["pesos"], r["tc"], i)
+                 for i, r in enumerate(data, start=1)],
+            )
+            conn.commit()
+
+    # Semilla de region_agrupante_mapa -- Doméstico/Exportación validada por
+    # Ezequiel 2026-11-03 sobre los 11 valores reales de d_zona_comercial.
+    (cantidad,) = conn.execute("SELECT COUNT(*) FROM region_agrupante_mapa").fetchone()
+    if cantidad == 0:
+        zonas = [
+            ("DTC", "Doméstico"),
+            ("BUENOS AIRES", "Doméstico"),
+            ("NOA", "Doméstico"),
+            ("INTERIOR", "Doméstico"),
+            ("UK", "Exportación"),
+            ("EUROPE", "Exportación"),
+            ("CARIBBEAN", "Exportación"),
+            ("UNITED STATES", "Exportación"),
+            ("LATIN AMERICA", "Exportación"),
+            ("CANADA", "Exportación"),
+            ("ASIA", "Exportación"),
+        ]
+        conn.executemany(
+            "INSERT INTO region_agrupante_mapa (zona_comercial, agrupante) VALUES (?, ?)",
+            zonas,
+        )
+        conn.commit()
     conn.close()
