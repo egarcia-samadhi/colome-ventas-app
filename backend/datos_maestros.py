@@ -122,6 +122,16 @@ async def listar_snap_sin_clasificar(user=Depends(require_reader)):
     return {"desde": desde.isoformat(), "hasta": (hasta_excl - timedelta(days=1)).isoformat(), "combos": combos}
 
 
+def _invalidar_snap_cache() -> None:
+    """La clasificación por línea de negocio (snap_linea_negocio_mapa) puede
+    reclasificar un mes YA CERRADO del SNAP -- a diferencia del resto del
+    cache de rangos cerrados (ver snap.py::SNAP_RANGE_CACHE), que asume que
+    un mes cerrado nunca cambia. Import diferido para evitar ciclo (snap.py
+    no importa datos_maestros.py)."""
+    from snap import limpiar_snap_cache
+    limpiar_snap_cache()
+
+
 def _validar_snap_body(body: dict) -> tuple[str | None, str | None, str | None, str]:
     centro_costo = (body.get("centro_costo") or "").strip() or None
     categoria = (body.get("categoria") or "").strip() or None
@@ -144,6 +154,7 @@ async def agregar_snap_linea_negocio(body: dict, admin=Depends(require_admin)):
     )
     conn.commit()
     conn.close()
+    _invalidar_snap_cache()
     return {"ok": True}
 
 
@@ -160,6 +171,7 @@ async def editar_snap_linea_negocio(id: int, body: dict, admin=Depends(require_a
     conn.close()
     if not actualizado:
         raise HTTPException(status_code=404, detail=f"No existe la regla id={id}")
+    _invalidar_snap_cache()
     return {"ok": True}
 
 
@@ -172,6 +184,7 @@ async def borrar_snap_linea_negocio(id: int, admin=Depends(require_admin)):
     conn.close()
     if not borrado:
         raise HTTPException(status_code=404, detail=f"No existe la regla id={id}")
+    _invalidar_snap_cache()
     return {"ok": True}
 
 

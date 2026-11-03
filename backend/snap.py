@@ -64,9 +64,75 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ig_ventas import _lineas_vinos
+from ig_ventas import CACHE_DIR, _lineas_vinos
 
 router = APIRouter(prefix="/api/ventas", tags=["snap"])
+
+# Cache en disco de SNAP por rango (2026-11-03, pedido de Ezequiel: "si
+# queres cachear el snap" -- tardaba bastante al elegir un mes/YTD
+# anterior). Todo rango que puede pedir `/api/ventas/snap` (mes individual
+# o YTD hasta ese mes) es SIEMPRE un mes YA CERRADO -- `mes` solo acepta
+# valores de `_meses_disponibles()`, que termina en el último mes cerrado
+# (nunca el actual) -- así que, mismo criterio que PANEL_AGG_CACHE en
+# ig_ventas.py, el resultado de un rango cerrado no puede cambiar más y se
+# puede cachear indefinidamente, sin fecha de vencimiento. ÚNICA excepción:
+# si se edita `snap_linea_negocio_mapa` desde Datos Maestros, la
+# clasificación de un mes YA cerrado SÍ puede cambiar retroactivamente --
+# por eso `limpiar_snap_cache()` (llamada desde datos_maestros.py en el
+# alta/edición/baja de esa tabla) invalida todo el cache de una.
+#
+# El offensor real era `_ly_mensual()` (más abajo): recalculaba
+# `ventas_sbl()` para TODOS los meses cerrados desde jul-2025 en CADA
+# request a /api/ventas/snap, sin importar qué mes pidió el usuario --
+# crecía linealmente con el histórico. Con el cache, solo el PRIMER
+# request de cada mes nuevo paga el costo real; de ahí en más, lectura de
+# disco.
+SNAP_RANGE_CACHE = CACHE_DIR.parent / "snap_range_cache.json"
+_snap_cache_mem: dict | None = None
+
+
+def _cargar_snap_cache() -> dict:
+    global _snap_cache_mem
+    if _snap_cache_mem is None:
+        try:
+            _snap_cache_mem = json.loads(SNAP_RANGE_CACHE.read_text(encoding="utf-8"))
+        except Exception:
+            _snap_cache_mem = {}
+    return _snap_cache_mem
+
+
+def _guardar_snap_cache() -> None:
+    SNAP_RANGE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    SNAP_RANGE_CACHE.write_text(json.dumps(_snap_cache_mem), encoding="utf-8")
+
+
+def limpiar_snap_cache() -> None:
+    """Invalida el cache de rangos cerrados del SNAP -- llamar siempre que
+    cambie `snap_linea_negocio_mapa` (ver datos_maestros.py)."""
+    global _snap_cache_mem
+    _snap_cache_mem = {}
+    try:
+        SNAP_RANGE_CACHE.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _ventas_sbl_cached(desde: date, hasta_incl: date) -> list[dict | None]:
+    cache = _cargar_snap_cache()
+    key = f"{desde.isoformat()}_{hasta_incl.isoformat()}_sbl"
+    if key not in cache:
+        cache[key] = ventas_sbl(desde, hasta_incl)
+        _guardar_snap_cache()
+    return cache[key]
+
+
+def _ventas_fdelmotte_cached(desde: date, hasta_incl: date) -> dict:
+    cache = _cargar_snap_cache()
+    key = f"{desde.isoformat()}_{hasta_incl.isoformat()}_fm"
+    if key not in cache:
+        cache[key] = ventas_fdelmotte(desde, hasta_incl)
+        _guardar_snap_cache()
+    return cache[key]
 
 # LY para jul-ago 2025 (agregado 2026-10-20): ese rango es ANTERIOR al
 # histórico real en vivo (`DESDE_HISTORICO` = 2025-09-01, ig_ventas no
@@ -851,7 +917,7 @@ def _ly_mensual() -> list[dict]:
     anio, mes = LFY_DESDE.year, LFY_DESDE.month
     while date(anio, mes, 1) <= hasta_cerrado:
         mes_ini, mes_fin = _rango_mes(anio, mes)
-        filas = ventas_sbl(mes_ini, mes_fin)
+        filas = _ventas_sbl_cached(mes_ini, mes_fin)
         tot = next((f for f in filas if f and f["label"] == "TOTAL SALES"), None)
         periodo = f"{anio:04d}-{mes:02d}"
         bud = budget.get(periodo)
@@ -929,15 +995,15 @@ async def snap(mes: str | None = None, fdelmotte: bool = False, user=Depends(req
         "meses_disponibles": disponibles,
     }
     if fdelmotte:
-        fd_mes = ventas_fdelmotte(desde_mes, hasta_mes)
-        fd_ytd = ventas_fdelmotte(desde_ytd, hasta_mes)
+        fd_mes = _ventas_fdelmotte_cached(desde_mes, hasta_mes)
+        fd_ytd = _ventas_fdelmotte_cached(desde_ytd, hasta_mes)
         base["fdelmotte_variedad_mes"] = fd_mes["por_variedad"]
         base["fdelmotte_variedad_ytd"] = fd_ytd["por_variedad"]
         base["fdelmotte_canal_mes"] = fd_mes["por_canal"]
         base["fdelmotte_canal_ytd"] = fd_ytd["por_canal"]
         base["ly_mensual"] = []
     else:
-        base["sbl_mes"] = ventas_sbl(desde_mes, hasta_mes)
-        base["sbl_ytd"] = ventas_sbl(desde_ytd, hasta_mes)
+        base["sbl_mes"] = _ventas_sbl_cached(desde_mes, hasta_mes)
+        base["sbl_ytd"] = _ventas_sbl_cached(desde_ytd, hasta_mes)
         base["ly_mensual"] = _ly_mensual()
     return base
