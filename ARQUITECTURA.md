@@ -229,6 +229,14 @@ especificaba).
   Cliente/Cajas9l/Venta Neta/Descuento Comercial/% Desc.
 - Mismo campo real de descuento (`m_desc_total`) y mismo criterio de
   `mg_pct` que `ventas_por_sku` en las 2 funciones nuevas.
+- **Bug real corregido el mismo día** (Ezequiel: "por vendedor el drill
+  down no me esta coincidiendo la cantidad"): `DesgloseClienteModal`
+  mostraba "Cajas9l" -- pero la tabla PROPIA de Por Vendedor nunca tuvo
+  esa columna, solo "Cant." (unidades sueltas, `ventas_por_vendedor`
+  nunca agrega cajas9l). El usuario comparaba magnitudes distintas. Se
+  sacó la columna "Cantidad" del modal del todo -- queda 1 sola métrica
+  "Caja de 9" en Por SKU y Por Vendedor (Ezequiel: "caja de 9 es lo que
+  normaliza el dato, sino no es comparable").
 
 Verificado en vivo (Claude-en-Chrome), las 3 vistas: Por Cliente, click en
 "MIRAFLORES SRL" abrió AMALAYA/COLOME/ALTURA MAXIMA por producto (%Desc
