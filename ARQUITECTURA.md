@@ -1139,6 +1139,12 @@ el clasificador de seguridad ("Out-of-Place Publication") -- publicar
 sensible que un cambio de código común. Se pidió confirmación
 explícita antes de pushear.
 
+### 3ra vuelta, mismo día: 2 pestañas separadas
+
+Ezequiel: *"hacelo en 2 pestañas separadas"* -- Total/Por Línea y Detalle
+(SKU) estaban apiladas verticalmente; ahora son 2 pestañas (mismo patrón
+que Datos Maestros/Otros Análisis), commit `9ef7d05`.
+
 Detalle completo en memoria de Claude, `proyecto_colome_ventas_budget_editable`.
 
 ## Sales Performance: feedback visual + cache de SNAP (agregado 2026-11-03)
