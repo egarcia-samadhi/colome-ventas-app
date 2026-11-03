@@ -226,7 +226,7 @@ function SeccionDetalle({ periodos, puedeEditar, onCambio }: {
   const total = filtradas.reduce((a, f) => ({ cajas: a.cajas + f.cajas, usd: a.usd + f.usd }), { cajas: 0, usd: 0 });
 
   return (
-    <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6 mt-5">
+    <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
       <div className="mb-4 flex items-start justify-between flex-wrap gap-3">
         <div>
           <h3 className="text-sm font-semibold text-[#1c1811]">Detalle (SKU)</h3>
@@ -317,20 +317,38 @@ export default function BudgetPage() {
   useEffect(load, [load]);
 
   const periodos = filas.map((f) => f.periodo);
+  const [sub, setSub] = useState<"resumen" | "detalle">("resumen");
 
   return (
     <AppShell current="/budget/" title="Budget">
-      <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6 mt-6">
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-[#1c1811]">Budget 2026-2027</h3>
-          <p className="text-[11px] text-[#847c68] mt-0.5">
-            Fuente: Budget_Dinamico.xlsx de Ariel Culasso. USD en miles, consistente con Panel de Ventas y Sales Performance. Total y Por Línea son de solo lectura -- se calculan sumando el Detalle (SKU) de abajo, que es la fuente real editable.
-          </p>
-        </div>
-        {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
-        {loading ? <div className="h-64 rounded-md bg-[#f7f5f0] animate-pulse" /> : <TablaResumen lineas={lineas} filas={filas} />}
+      <div className="flex gap-1.5 mt-6 mb-5">
+        {(["resumen", "detalle"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setSub(t)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
+              sub === t ? "bg-[#7D4E5B] text-white" : "bg-[#f7f5f0] text-[#1c1811] hover:bg-[#ece6d8]"
+            }`}
+          >
+            {t === "resumen" ? "Total y Por Línea" : "Detalle (SKU)"}
+          </button>
+        ))}
       </div>
-      {!loading && periodos.length > 0 && (
+
+      {sub === "resumen" && (
+        <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-[#1c1811]">Budget 2026-2027</h3>
+            <p className="text-[11px] text-[#847c68] mt-0.5">
+              Fuente: Budget_Dinamico.xlsx de Ariel Culasso. USD en miles, consistente con Panel de Ventas y Sales Performance. Total y Por Línea son de solo lectura -- se calculan sumando el Detalle (SKU) (otra pestaña), que es la fuente real editable.
+            </p>
+          </div>
+          {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+          {loading ? <div className="h-64 rounded-md bg-[#f7f5f0] animate-pulse" /> : <TablaResumen lineas={lineas} filas={filas} />}
+        </div>
+      )}
+
+      {sub === "detalle" && !loading && periodos.length > 0 && (
         <SeccionDetalle periodos={periodos} puedeEditar={puedeEditar} onCambio={load} />
       )}
     </AppShell>
