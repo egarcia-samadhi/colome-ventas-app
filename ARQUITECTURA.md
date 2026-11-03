@@ -1067,6 +1067,41 @@ Verificado en vivo: tildar "Doméstico" tildó automáticamente Buenos
 Aires + DTC y filtró el total a $1.489.633. Detalle completo en
 memoria de Claude, `proyecto_colome_ventas_agrupante_region`.
 
+### País → Región: tabla editable que reemplaza la asignación cruda del ERP (agregado 2026-11-03, mismo día)
+
+Ezequiel preguntó *"donde veo la parametrizacion de que alemania entra
+en europe?"* -- investigado en vivo: `zona` viene 100% crudo del ERP,
+NINGUNA regla nuestra decide esa asignación (confirmado: toda fila con
+`pais=ALEMANIA` trae `zona=EUROPE` directo de Redline). Pidió entonces:
+*"quiero que crees una tabla en datos maestros que sea la regla para
+esta hoja... si ariel culasso quiere hacer un cambio de region en un
+pais lo va a poder editar desde datos maestros"*.
+
+Relevado en vivo: de 31 países reales, 30 mapean 1 a 1 a una sola zona
+-- Argentina es la única excepción (4 zonas por su desglose doméstico
+interno, DTC/Buenos Aires/NOA/Interior) y queda FUERA de esta tabla a
+propósito (bloqueado explícito en el POST).
+
+- **Backend:** `pais_zona_mapa` (`database.py`), sembrada como espejo
+  EXACTO del dato crudo actual (0 cambios de comportamiento al
+  desplegar). CRUD en `datos_maestros.py`
+  (`/api/datos-maestros/pais-zona`). `ig_ventas.py::facts_panel_ventas()`
+  gana el parámetro `pais_zona_override: dict[str, str]`, aplicado
+  DENTRO de la función, sustituyendo el campo `zona` de cada fila
+  agregada según su `pais` ANTES de codificar a `dims`/`facts` -- corre
+  para Panel de Ventas, Ventas por Región y el Agrupante de Región a la
+  vez (los 3 consumen el mismo `dims["zona"]` resultante). No requiere
+  invalidar ningún cache: `PANEL_AGG_CACHE` sigue guardando la zona
+  CRUDA, el override se aplica fresco en cada request. `panel_ventas.py`
+  pasa `get_pais_zona_map()` como ese parámetro.
+- **Frontend:** `datos-maestros/page.tsx` gana una 6ta pestaña "País →
+  Región" (`?tab=pais-zona`).
+
+Verificado con smoke test (datos sintéticos) antes de desplegar, y en
+vivo después: total general y zona de Alemania sin cambios (espejo
+exacto, como se diseñó). Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_pais_zona_mapa`.
+
 ## Budget: pantalla editable real (agregado 2026-11-03)
 
 Pedido explícito de Ezequiel: *"La hoja Budget no esta mostrando la tabla
