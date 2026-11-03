@@ -83,6 +83,23 @@ def init_db():
             agrupante TEXT NOT NULL
         )
     """)
+    # Panel de Ventas -> filtro previo de Marca: pedido explícito de Ezequiel
+    # 2026-11-03 ("vienen pre filtradas todas las marcas menos familia del
+    # monte... generar una categoria y filtro previo como hicimos con canal
+    # donde esten: Colome & Amalaya y Familia del monte, asi evitamos ese
+    # filtrado previo de tantas marcas"). El filtro de Brand real tiene solo
+    # 5 valores crudos de d_rubro (confirmado en vivo 2026-11-03, universo
+    # GRUPO_VALIDO = "VINOS **"): ALTURA MAXIMA **, COLOME **, AMALAYA **,
+    # TERROTORIO ** (typo real del ERP, no tocar) y FDELMOTTE **. Mismo
+    # criterio que canal_agrupante_mapa: catálogo fijo editable a mano desde
+    # Datos Maestros, 1 brand -> 1 agrupante, el filtro de Brand detallado
+    # sigue existiendo tal cual.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS marca_agrupante_mapa (
+            brand TEXT PRIMARY KEY,
+            agrupante TEXT NOT NULL
+        )
+    """)
     conn.commit()
 
     # Semilla fija (2026-10-07, pedido explícito de Ezequiel: "tiene que ser
@@ -155,6 +172,24 @@ def init_db():
         conn.executemany(
             "INSERT INTO canal_agrupante_mapa (canal_venta, agrupante) VALUES (?, ?)",
             canales,
+        )
+        conn.commit()
+
+    # Semilla de marca_agrupante_mapa -- replica el default que ya tenía el
+    # frontend (todas las marcas tildadas menos FDELMOTTE), ahora explícito
+    # en un agrupante de 2 valores en vez de una exclusión hardcodeada.
+    (cantidad,) = conn.execute("SELECT COUNT(*) FROM marca_agrupante_mapa").fetchone()
+    if cantidad == 0:
+        marcas = [
+            ("ALTURA MAXIMA **", "Colomé & Amalaya"),
+            ("COLOME **", "Colomé & Amalaya"),
+            ("AMALAYA **", "Colomé & Amalaya"),
+            ("TERROTORIO **", "Colomé & Amalaya"),
+            ("FDELMOTTE **", "Familia del Monte"),
+        ]
+        conn.executemany(
+            "INSERT INTO marca_agrupante_mapa (brand, agrupante) VALUES (?, ?)",
+            marcas,
         )
         conn.commit()
     conn.close()

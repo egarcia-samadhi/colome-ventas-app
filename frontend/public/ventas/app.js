@@ -150,16 +150,34 @@
   });
   const AGRUPANTES_ORDEN = [...CANALES_POR_AGRUPANTE.keys()].sort((a, b) =>
     a === 'Sin agrupar' ? 1 : b === 'Sin agrupar' ? -1 : a.localeCompare(b, 'es'));
+  // Agrupante de Marca (2026-11-03, pedido de Ezequiel: "vienen pre
+  // filtradas todas las marcas menos familia del monte... generar una
+  // categoria y filtro previo como hicimos con canal, Colome & Amalaya y
+  // Familia del monte"): mismo patrón que Agrupante de Canal arriba --
+  // filtro previo de conveniencia sobre los 5 valores crudos de Brand (ver
+  // marca_agrupante_mapa en Datos Maestros / panel_ventas.py), sin
+  // reemplazar el filtro de Brand detallado.
+  const AGRUPANTE_POR_MARCA = D.brand_agrupante || [];
+  const MARCAS_POR_AGRUPANTE = new Map();
+  D.brand.forEach((_, i) => {
+    const ag = AGRUPANTE_POR_MARCA[i] || 'Sin agrupar';
+    if (!MARCAS_POR_AGRUPANTE.has(ag)) MARCAS_POR_AGRUPANTE.set(ag, []);
+    MARCAS_POR_AGRUPANTE.get(ag).push(i);
+  });
+  const MARCA_AGRUPANTES_ORDEN = [...MARCAS_POR_AGRUPANTE.keys()].sort((a, b) =>
+    a === 'Sin agrupar' ? 1 : b === 'Sin agrupar' ? -1 : a.localeCompare(b, 'es'));
   // FdelMotte: marca presente en ig_ventas (dim "brand" = d_rubro) pero
   // ausente del Excel real de "Ventas" que usa la empresa (ver
   // ig_ventas.py) -- confirmado por Ariel Culasso 2026-10-09: va separada,
   // no mezclada en el número consolidado de Panel de Ventas (ver pestaña
   // aparte en Sales Performance, más abajo). Por eso el chip de Brand
-  // arranca con TODAS las marcas tildadas MENOS FdelMotte, al revés del
-  // resto de los filtros (nada tildado = sin filtro) -- se suma tildando
-  // su chip si alguna vez hace falta verla adentro del consolidado.
-  const FDELMOTTE_IDX = D.brand.findIndex(v => keyNorm(v).replace(/[^A-Z]/g, '').includes('DELMOTTE'));
-  const DEFAULT_BRAND = new Set(D.brand.map((_, i) => i).filter(i => i !== FDELMOTTE_IDX));
+  // arranca con TODAS las marcas tildadas MENOS FdelMotte (= agrupante
+  // "Familia del Monte"), al revés del resto de los filtros (nada tildado =
+  // sin filtro) -- se suma tildando su chip si alguna vez hace falta verla
+  // adentro del consolidado.
+  const DEFAULT_BRAND = new Set((MARCAS_POR_AGRUPANTE.get('Familia del Monte') || []).length
+    ? D.brand.map((_, i) => i).filter(i => !(MARCAS_POR_AGRUPANTE.get('Familia del Monte') || []).includes(i))
+    : D.brand.map((_, i) => i));
   const brandEsDefault = () => st.brand.size === DEFAULT_BRAND.size && [...DEFAULT_BRAND].every(i => st.brand.has(i));
   const ejercicioInicial = EJERCICIOS_DISPONIBLES.includes(EJERCICIO_ACTUAL) ? EJERCICIO_ACTUAL : EJERCICIOS_DISPONIBLES[EJERCICIOS_DISPONIBLES.length - 1];
   const st = { ejercicio: ejercicioInicial, periodos: periodosDefaultPara(ejercicioInicial), metrica: 'usd', comparar: true, dim: 'cliente', vista: 'snap', dgSort: 'usd', dgDir: 'desc' };
@@ -297,6 +315,15 @@
           const idxs = CANALES_POR_AGRUPANTE.get(ag);
           const todas = idxs.every(i => st.canal.has(i));
           h += `<label class="chip"><input type="checkbox" data-ag="${esc(ag)}"${todas ? ' checked' : ''}>${esc(ag)}</label>`;
+        });
+        h += '</div></div>';
+      }
+      if (fl.key === 'brand') {
+        h += '<div class="fs"><span class="fl">Agrupante de Marca</span><div class="fl-list">';
+        MARCA_AGRUPANTES_ORDEN.forEach(ag => {
+          const idxs = MARCAS_POR_AGRUPANTE.get(ag);
+          const todas = idxs.every(i => st.brand.has(i));
+          h += `<label class="chip"><input type="checkbox" data-mag="${esc(ag)}"${todas ? ' checked' : ''}>${esc(ag)}</label>`;
         });
         h += '</div></div>';
       }
@@ -669,6 +696,12 @@
       buildSidebar();
       renderPeriodoChips();
     }
+    else if (t.dataset.mag) {
+      const idxs = MARCAS_POR_AGRUPANTE.get(t.dataset.mag) || [];
+      if (t.checked) idxs.forEach(i => st.brand.add(i)); else idxs.forEach(i => st.brand.delete(i));
+      buildSidebar();
+      renderPeriodoChips();
+    }
     else if (t.id === 'pvBud') { st.comparar = t.checked; }
     else if (t.id === 'pvEjercicio') {
       st.ejercicio = t.value;
@@ -681,8 +714,7 @@
     if (e.target.id !== 'pvClear') return;
     FILTROS.forEach(f => { st[f.key].clear(); if (f.key === 'brand') DEFAULT_BRAND.forEach(i => st.brand.add(i)); });
     st.periodos = periodosConDato(st.ejercicio);
-    side.querySelectorAll('input[data-f]').forEach(i => { i.checked = st[i.dataset.f].has(Number(i.dataset.v)); });
-    side.querySelectorAll('input[data-ag]').forEach(i => { i.checked = false; });
+    buildSidebar();
     renderPeriodoChips();
     refresh();
   });

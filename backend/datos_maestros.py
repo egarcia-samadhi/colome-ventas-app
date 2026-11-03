@@ -245,3 +245,74 @@ async def borrar_canal_agrupante(canal_venta: str, admin=Depends(require_admin))
     if not borrado:
         raise HTTPException(status_code=404, detail=f"No existe el canal '{canal_venta}' en el mapa de agrupantes")
     return {"ok": True}
+
+
+# Panel de Ventas -> filtro previo "Agrupante de Marca": pedido explícito de
+# Ezequiel 2026-11-03 -- mismo patrón que canal_agrupante_mapa arriba, agrupa
+# los 5 valores crudos de brand (d_rubro) en "Colomé & Amalaya" / "Familia
+# del Monte" para evitar tener que destildar marca por marca en el Panel.
+def get_marca_agrupante_map() -> dict[str, str]:
+    conn = get_db()
+    rows = conn.execute("SELECT brand, agrupante FROM marca_agrupante_mapa").fetchall()
+    conn.close()
+    return {r["brand"]: r["agrupante"] for r in rows}
+
+
+@router.get("/marca-agrupante")
+async def listar_marca_agrupante(user=Depends(require_reader)):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT brand, agrupante FROM marca_agrupante_mapa ORDER BY agrupante, brand"
+    ).fetchall()
+    conn.close()
+    return {"rows": [dict(r) for r in rows]}
+
+
+@router.post("/marca-agrupante")
+async def agregar_marca_agrupante(body: dict, admin=Depends(require_admin)):
+    brand = (body.get("brand") or "").strip()
+    agrupante = (body.get("agrupante") or "").strip()
+    if not brand or not agrupante:
+        raise HTTPException(status_code=400, detail="brand y agrupante no pueden estar vacíos")
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO marca_agrupante_mapa (brand, agrupante) VALUES (?, ?)",
+            (brand, agrupante),
+        )
+        conn.commit()
+    except Exception:
+        conn.close()
+        raise HTTPException(status_code=409, detail=f"'{brand}' ya existe en la tabla")
+    conn.close()
+    return {"ok": True}
+
+
+@router.put("/marca-agrupante/{brand}")
+async def editar_marca_agrupante(brand: str, body: dict, admin=Depends(require_admin)):
+    agrupante = (body.get("agrupante") or "").strip()
+    if not agrupante:
+        raise HTTPException(status_code=400, detail="agrupante no puede estar vacío")
+    conn = get_db()
+    cur = conn.execute(
+        "UPDATE marca_agrupante_mapa SET agrupante = ? WHERE brand = ?",
+        (agrupante, brand),
+    )
+    conn.commit()
+    actualizado = cur.rowcount > 0
+    conn.close()
+    if not actualizado:
+        raise HTTPException(status_code=404, detail=f"No existe la marca '{brand}' en el mapa de agrupantes")
+    return {"ok": True}
+
+
+@router.delete("/marca-agrupante/{brand}")
+async def borrar_marca_agrupante(brand: str, admin=Depends(require_admin)):
+    conn = get_db()
+    cur = conn.execute("DELETE FROM marca_agrupante_mapa WHERE brand = ?", (brand,))
+    conn.commit()
+    borrado = cur.rowcount > 0
+    conn.close()
+    if not borrado:
+        raise HTTPException(status_code=404, detail=f"No existe la marca '{brand}' en el mapa de agrupantes")
+    return {"ok": True}
