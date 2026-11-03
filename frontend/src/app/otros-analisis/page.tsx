@@ -69,6 +69,19 @@ interface FilaVendedor { rubro: string; c_articulo: string; d_articulo: string; 
 const fmtNum = (n: number) =>
   n === 0 ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
+// Caja de 9 con 2 decimales (2026-11-03, bug real reportado por Ezequiel:
+// "sigo viendo inconsistencia" en el drill-down por Cliente) -- a nivel
+// de UN cliente dentro de UN producto(+vendedor), `cajas` suele ser
+// fraccionario chico (ej. 0.4166, 0.4998): con `fmtNum` (0 decimales)
+// cada fila individual redondeaba a "0" pero el Total (suma de los
+// fraccionarios reales, no de los "0" mostrados) redondeaba a "1" --
+// parecía que las filas no sumaban el total, cuando en realidad era solo
+// que `fmtNum` no alcanza para valores chicos. Las tablas principales
+// (Por SKU/Por Vendedor) sí pueden seguir con `fmtNum` sin decimales:
+// ahí `cajas` ya viene agregado a nivel producto completo, raramente < 1.
+const fmtCajas = (n: number) =>
+  n === 0 ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 // % Descuento Comercial (2026-11-03, pedido explícito de Ezequiel: "en
 // todas las tablas que pusimos descuento comercial, debemos agregar una
 // columna con el % de descuento") -- `ars` (venta neta, `valor_mon_loc`)
@@ -337,7 +350,7 @@ function DesgloseMarcaProductoModal({ cliente, desde, hasta, onClose }: {
                       <tr key={`${f.marca}::${f.c_articulo}`} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
                         <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{f.marca}</td>
                         <td className="py-1.5 px-3 text-[#1c1811]">{f.d_articulo}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtCajas(f.cajas)}</td>
                         <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
                         <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.descuento)}</td>
                         <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(f.descuento, f.ars)}</td>
@@ -346,7 +359,7 @@ function DesgloseMarcaProductoModal({ cliente, desde, hasta, onClose }: {
                     ))}
                     <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
                       <td className="py-1.5 px-3" colSpan={2}>Total ({rows.length} productos)</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.cajas)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtCajas(total.cajas)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.ars)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.descuento)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(total.descuento, total.ars)}</td>
@@ -445,7 +458,7 @@ function DesgloseClienteModal({ titulo, c_articulo, vendedor, desde, hasta, onCl
                     {rows.map((f) => (
                       <tr key={f.cliente} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
                         <td className="py-1.5 px-3 text-[#1c1811]">{f.cliente}</td>
-                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.cajas)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums">{fmtCajas(f.cajas)}</td>
                         <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.ars)}</td>
                         <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(f.descuento)}</td>
                         <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(f.descuento, f.ars)}</td>
@@ -453,7 +466,7 @@ function DesgloseClienteModal({ titulo, c_articulo, vendedor, desde, hasta, onCl
                     ))}
                     <tr className="border-t border-[#ece6d8] bg-[#fdf3ea] font-medium">
                       <td className="py-1.5 px-3">Total ({rows.length} clientes)</td>
-                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.cajas)}</td>
+                      <td className="py-1.5 px-3 text-right tabular-nums">{fmtCajas(total.cajas)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.ars)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtNum(total.descuento)}</td>
                       <td className="py-1.5 px-3 text-right tabular-nums">{fmtPct(total.descuento, total.ars)}</td>
