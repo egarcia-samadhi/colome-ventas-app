@@ -180,10 +180,10 @@ Durante la verificación en vivo del punto anterior, el tablero completo quedó 
 *"por cliente, por sku y por vendedor, podremos mostrar la composicion en una ventana flotante?"* → *"por factura"*. Click en una fila/celda abre un popup con las facturas REALES que componen ese total -- mismo patrón que el popup "Sales by Market" de Sales Performance, acá a nivel factura.
 
 - **Backend:** `ig_ventas.py::detalle_por_factura(desde, hasta_incl, cliente?, c_articulo?, vendedor?)` -- agrega por (comprobante, número, fecha), UNA fila por factura aunque tenga más de una línea dentro del filtro (los artículos se juntan en una celda, separados por coma). Endpoint `/api/otros-analisis/detalle-facturas`, filtros combinables.
-- **Frontend:** `ComposicionModal` compartido por las 3 vistas -- overlay + tabla Fecha/Comprobante/(lo que no esté ya fijado por el filtro: Cliente, Vendedor o Artículo(s))/Cajas9l/Venta Neta/Descuento Comercial + total.
-  - Por Cliente: click en el cliente → filtra por `cliente`.
+- **Frontend:** `ComposicionModal` -- overlay + tabla Fecha/Comprobante/(lo que no esté ya fijado por el filtro: Cliente, Vendedor o Artículo(s))/Cajas9l/Venta Neta/Descuento Comercial/% Desc. + total.
   - Por SKU: click en el artículo → filtra por `c_articulo`.
-  - Por Vendedor: click en la celda "Venta Neta" de cada vendedor×artículo → filtra por `c_articulo`+`vendedor` (el más granular de los 3).
+  - Por Vendedor: click en la celda "Venta Neta" de cada vendedor×artículo → filtra por `c_articulo`+`vendedor`.
+  - **Por Cliente NO usa este modal desde 2026-11-03** -- ver subsección propia más abajo, "Por Cliente: drill-down por Marca/Producto".
 
 Verificado en vivo y contra el backend directo (`docker exec`): click en un cliente top ($145.152.954) abrió el popup con exactamente 1 factura de exportación de 12 artículos, suma exacta. Detalle completo en memoria de Claude, `proyecto_colome_ventas_composicion_por_factura`.
 - **Gotcha de cache (recurrente, atención si se agrega un campo nuevo a
@@ -208,6 +208,30 @@ Verificado en vivo y contra el backend directo (`docker exec`): click en un clie
   `PYTHONPATH=/app` — precalienta el mes que acaba de cerrar antes de que
   cualquier usuario lo pida. Detalle completo en memoria de Claude
   `proyecto_colome_ventas_otros_analisis`.
+
+### Por Cliente: drill-down por Marca/Producto, no por factura (agregado 2026-11-03)
+
+Pedido explícito de Ezequiel: *"el drill-down, no tiene que ser por
+factura, tiene que ser por marca - producto"*. Alcance SOLO Por Cliente --
+Por SKU y Por Vendedor siguen con `ComposicionModal` (composición por
+factura), sin tocar.
+
+- **Backend:** `ig_ventas.py::ventas_cliente_por_marca_producto(desde,
+  hasta_incl, cliente)` -- agrega `_lineas_vinos()` filtrado a UN cliente
+  por (Marca=`d_rubro`, `c_articulo`, `d_articulo`). Mismo campo real de
+  descuento (`m_desc_total`) y mismo `mg_pct` que `ventas_por_sku`.
+  Endpoint `GET /api/otros-analisis/por-cliente/marca-producto?desde=&hasta=&cliente=`.
+- **Frontend:** `DesgloseMarcaProductoModal` (nuevo, reemplaza
+  `ComposicionModal` SOLO en `PorCliente`) -- mismo criterio visual que la
+  tabla de Por SKU: Marca/Producto/Cajas9l/Venta Neta/Descuento
+  Comercial/% Desc./Precio Promedio, ordenado por Venta Neta desc, fila
+  de Total.
+
+Verificado en vivo (Claude-en-Chrome): click en "MIRAFLORES SRL" (oct-2026,
+cliente con descuento real) abrió el desglose con AMALAYA/COLOME/ALTURA
+MAXIMA por producto, %Desc fila por fila coherente con el 60.4% ya
+mostrado en el ranking de Por Cliente. Detalle completo en memoria de
+Claude, `proyecto_colome_ventas_drilldown_cliente_marca_producto`.
 
 ### Columna "% Descuento" en las 4 tablas con Descuento Comercial (agregado 2026-11-03)
 
