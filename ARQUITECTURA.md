@@ -932,6 +932,37 @@ etiquetar:
 Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_controles_mas_claros`.
 
+## Sales Performance: feedback visual + cache de SNAP (agregado 2026-11-03)
+
+Pedido explícito de Ezequiel: elegir un mes anterior en el selector de
+Sales Performance (Monthly/YTD) tardaba bastante y no daba ningún
+indicador de que estaba cargando.
+
+- **Feedback visual (`snap.js`):** el handler de `#snapMesSel` (`change`)
+  ahora es `async`, atenúa ambos roots (`#snapConsolidado`/
+  `#snapFdelMotte`, clase `.snap-loading`) y deshabilita el selector
+  mientras dura el refetch (`Promise.all` + `finally` sobre
+  `snapInstances[].refetch()`), con texto "Actualizando…"
+  (`#snapMesStatus`, en `sidebar.html`).
+- **Cache en disco (`snap.py`):** todo rango que puede pedir
+  `/api/ventas/snap` (mes individual o YTD hasta ese mes) es SIEMPRE un
+  mes ya CERRADO -- `mes` solo acepta valores de `_meses_disponibles()`,
+  que nunca incluye el mes en curso. El offensor real era
+  `_ly_mensual()`: recalculaba `ventas_sbl()` para TODOS los meses
+  cerrados desde jul-2025 en CADA request, sin importar qué mes pidió el
+  usuario. `SNAP_RANGE_CACHE` (`/data/snap_range_cache.json`) cachea el
+  resultado de `ventas_sbl()`/`ventas_fdelmotte()` por rango, sin
+  vencimiento (`_ventas_sbl_cached()`/`_ventas_fdelmotte_cached()`,
+  usados en `snap()` y `_ly_mensual()`). Única excepción:
+  `limpiar_snap_cache()` se llama desde los 3 endpoints CRUD de
+  `/api/datos-maestros/snap-linea-negocio` -- esa tabla sí puede
+  reclasificar un mes ya cerrado.
+- **Verificado en vivo (2026-11-03):** mismo mes pedido 2 veces --
+  3073ms la primera, 479ms la segunda (cacheada), ~6x más rápido.
+
+Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_sales_performance_feedback_y_cache`.
+
 ## Deploy
 
 - **URL producción:** https://colome-ventas.gruposamadhiai.com
@@ -950,4 +981,4 @@ Detalle completo en memoria de Claude,
   vía `get_sso_session()` en `app.py`.
 - **Cache en disco:** `/data/ig_ventas_cache` (persistente, volumen `/data`
   del servicio) + agregados cacheados (`panel_ventas_agg_cerrado.json`,
-  `otros_analisis_agg_cerrado.json` en `/data`).
+  `otros_analisis_agg_cerrado.json`, `snap_range_cache.json` en `/data`).
