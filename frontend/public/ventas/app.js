@@ -166,6 +166,21 @@
   });
   const MARCA_AGRUPANTES_ORDEN = [...MARCAS_POR_AGRUPANTE.keys()].sort((a, b) =>
     a === 'Sin agrupar' ? 1 : b === 'Sin agrupar' ? -1 : a.localeCompare(b, 'es'));
+  // Agrupante de Región (2026-11-03, pedido de Ezequiel: "las regiones no
+  // estan diagramadas y configuradas mediante datos maestros") -- mismo
+  // patrón que Agrupante de Canal/Marca arriba, sobre los 11 valores
+  // crudos de zona (d_zona_comercial, ver region_agrupante_mapa en Datos
+  // Maestros / panel_ventas.py), sin reemplazar el filtro de Región
+  // detallado.
+  const AGRUPANTE_POR_REGION = D.zona_agrupante || [];
+  const REGIONES_POR_AGRUPANTE = new Map();
+  D.zona.forEach((_, i) => {
+    const ag = AGRUPANTE_POR_REGION[i] || 'Sin agrupar';
+    if (!REGIONES_POR_AGRUPANTE.has(ag)) REGIONES_POR_AGRUPANTE.set(ag, []);
+    REGIONES_POR_AGRUPANTE.get(ag).push(i);
+  });
+  const REGION_AGRUPANTES_ORDEN = [...REGIONES_POR_AGRUPANTE.keys()].sort((a, b) =>
+    a === 'Sin agrupar' ? 1 : b === 'Sin agrupar' ? -1 : a.localeCompare(b, 'es'));
   // FdelMotte: marca presente en ig_ventas (dim "brand" = d_rubro) pero
   // ausente del Excel real de "Ventas" que usa la empresa (ver
   // ig_ventas.py) -- confirmado por Ariel Culasso 2026-10-09: va separada,
@@ -324,6 +339,15 @@
           const idxs = MARCAS_POR_AGRUPANTE.get(ag);
           const todas = idxs.every(i => st.brand.has(i));
           h += `<label class="chip"><input type="checkbox" data-mag="${esc(ag)}"${todas ? ' checked' : ''}>${esc(ag)}</label>`;
+        });
+        h += '</div></div>';
+      }
+      if (fl.key === 'zona') {
+        h += '<div class="fs"><span class="fl">Agrupante de Región</span><div class="fl-list">';
+        REGION_AGRUPANTES_ORDEN.forEach(ag => {
+          const idxs = REGIONES_POR_AGRUPANTE.get(ag);
+          const todas = idxs.every(i => st.zona.has(i));
+          h += `<label class="chip"><input type="checkbox" data-rag="${esc(ag)}"${todas ? ' checked' : ''}>${esc(ag)}</label>`;
         });
         h += '</div></div>';
       }
@@ -699,6 +723,12 @@
     else if (t.dataset.mag) {
       const idxs = MARCAS_POR_AGRUPANTE.get(t.dataset.mag) || [];
       if (t.checked) idxs.forEach(i => st.brand.add(i)); else idxs.forEach(i => st.brand.delete(i));
+      buildSidebar();
+      renderPeriodoChips();
+    }
+    else if (t.dataset.rag) {
+      const idxs = REGIONES_POR_AGRUPANTE.get(t.dataset.rag) || [];
+      if (t.checked) idxs.forEach(i => st.zona.add(i)); else idxs.forEach(i => st.zona.delete(i));
       buildSidebar();
       renderPeriodoChips();
     }

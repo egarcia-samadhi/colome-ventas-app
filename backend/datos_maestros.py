@@ -329,3 +329,75 @@ async def borrar_marca_agrupante(brand: str, admin=Depends(require_admin)):
     if not borrado:
         raise HTTPException(status_code=404, detail=f"No existe la marca '{brand}' en el mapa de agrupantes")
     return {"ok": True}
+
+
+# Panel de Ventas -> filtro previo "Agrupante de Región": pedido explícito
+# de Ezequiel 2026-11-03 ("las regiones no estan diagramadas y configuradas
+# mediante datos maestros") -- mismo patrón que canal_agrupante_mapa/
+# marca_agrupante_mapa, agrupa los 11 valores crudos de zona (d_zona_
+# comercial) en "Doméstico"/"Exportación".
+def get_region_agrupante_map() -> dict[str, str]:
+    conn = get_db()
+    rows = conn.execute("SELECT zona_comercial, agrupante FROM region_agrupante_mapa").fetchall()
+    conn.close()
+    return {r["zona_comercial"]: r["agrupante"] for r in rows}
+
+
+@router.get("/region-agrupante")
+async def listar_region_agrupante(user=Depends(require_reader)):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT zona_comercial, agrupante FROM region_agrupante_mapa ORDER BY agrupante, zona_comercial"
+    ).fetchall()
+    conn.close()
+    return {"rows": [dict(r) for r in rows]}
+
+
+@router.post("/region-agrupante")
+async def agregar_region_agrupante(body: dict, admin=Depends(require_admin)):
+    zona_comercial = (body.get("zona_comercial") or "").strip()
+    agrupante = (body.get("agrupante") or "").strip()
+    if not zona_comercial or not agrupante:
+        raise HTTPException(status_code=400, detail="zona_comercial y agrupante no pueden estar vacíos")
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO region_agrupante_mapa (zona_comercial, agrupante) VALUES (?, ?)",
+            (zona_comercial, agrupante),
+        )
+        conn.commit()
+    except Exception:
+        conn.close()
+        raise HTTPException(status_code=409, detail=f"'{zona_comercial}' ya existe en la tabla")
+    conn.close()
+    return {"ok": True}
+
+
+@router.put("/region-agrupante/{zona_comercial}")
+async def editar_region_agrupante(zona_comercial: str, body: dict, admin=Depends(require_admin)):
+    agrupante = (body.get("agrupante") or "").strip()
+    if not agrupante:
+        raise HTTPException(status_code=400, detail="agrupante no puede estar vacío")
+    conn = get_db()
+    cur = conn.execute(
+        "UPDATE region_agrupante_mapa SET agrupante = ? WHERE zona_comercial = ?",
+        (agrupante, zona_comercial),
+    )
+    conn.commit()
+    actualizado = cur.rowcount > 0
+    conn.close()
+    if not actualizado:
+        raise HTTPException(status_code=404, detail=f"No existe la zona '{zona_comercial}' en el mapa de agrupantes")
+    return {"ok": True}
+
+
+@router.delete("/region-agrupante/{zona_comercial}")
+async def borrar_region_agrupante(zona_comercial: str, admin=Depends(require_admin)):
+    conn = get_db()
+    cur = conn.execute("DELETE FROM region_agrupante_mapa WHERE zona_comercial = ?", (zona_comercial,))
+    conn.commit()
+    borrado = cur.rowcount > 0
+    conn.close()
+    if not borrado:
+        raise HTTPException(status_code=404, detail=f"No existe la zona '{zona_comercial}' en el mapa de agrupantes")
+    return {"ok": True}

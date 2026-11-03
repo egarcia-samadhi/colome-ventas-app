@@ -20,7 +20,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from datos_maestros import get_canal_agrupante_map, get_marca_agrupante_map
+from datos_maestros import get_canal_agrupante_map, get_marca_agrupante_map, get_region_agrupante_map
 from ig_ventas import facts_panel_ventas
 
 router = APIRouter(prefix="/api/ventas", tags=["panel"])
@@ -51,4 +51,10 @@ async def panel_ventas(user=Depends(require_reader)):
     # canal_agrupante arriba.
     mapa_marca = get_marca_agrupante_map()
     data["dims"]["brand_agrupante"] = [mapa_marca.get(b, "Sin agrupar") for b in data["dims"]["brand"]]
+    # Filtro previo "Agrupante de Región" (2026-11-03, pedido de Ezequiel:
+    # "las regiones no estan diagramadas y configuradas mediante datos
+    # maestros") -- paralelo a dims["zona"], mismo criterio que canal/marca
+    # arriba.
+    mapa_region = get_region_agrupante_map()
+    data["dims"]["zona_agrupante"] = [mapa_region.get(z, "Sin agrupar") for z in data["dims"]["zona"]]
     return data

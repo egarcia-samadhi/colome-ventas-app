@@ -874,11 +874,202 @@ function MarcaAgrupanteMapa() {
   );
 }
 
+// Panel de Ventas -> filtro previo "Agrupante de Región" (2026-11-03,
+// pedido explícito de Ezequiel: "las regiones no estan diagramadas y
+// configuradas mediante datos maestros"). Catálogo fijo 1 zona_comercial
+// -> 1 agrupante sobre los 11 valores crudos de zona (d_zona_comercial),
+// mismo patrón que CanalAgrupanteMapa/MarcaAgrupanteMapa -- ver
+// backend/panel_ventas.py (dims.zona_agrupante).
+interface FilaRegionAgrupante { zona_comercial: string; agrupante: string }
+
+function RegionAgrupanteMapa() {
+  const [rows, setRows] = useState<FilaRegionAgrupante[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [puedeEditar, setPuedeEditar] = useState(false);
+  const [editando, setEditando] = useState<string | null>(null);
+  const [form, setForm] = useState<{ agrupante: string }>({ agrupante: "" });
+  const [mostrarAlta, setMostrarAlta] = useState(false);
+  const [alta, setAlta] = useState<{ zona_comercial: string; agrupante: string }>({ zona_comercial: "", agrupante: "" });
+  const [errorAlta, setErrorAlta] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u) => setPuedeEditar(u?.role === "admin"))
+      .catch(() => {});
+  }, []);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    fetch("/api/datos-maestros/region-agrupante")
+      .then((r) => {
+        if (r.status === 401) { window.location.href = "/"; return null; }
+        if (!r.ok) throw new Error("Error cargando el mapa de Agrupante de Región");
+        return r.json();
+      })
+      .then((d) => { if (d) setRows(d.rows); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(load, [load]);
+
+  const startEdit = (r: FilaRegionAgrupante) => {
+    setEditando(r.zona_comercial);
+    setForm({ agrupante: r.agrupante });
+  };
+
+  const guardar = async (zona_comercial: string) => {
+    const r = await fetch(`/api/datos-maestros/region-agrupante/${encodeURIComponent(zona_comercial)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    if (r.ok) { setEditando(null); load(); }
+  };
+
+  const eliminar = async (zona_comercial: string) => {
+    if (!window.confirm(`¿Eliminar "${zona_comercial}" del catálogo de Agrupante de Región?`)) return;
+    const r = await fetch(`/api/datos-maestros/region-agrupante/${encodeURIComponent(zona_comercial)}`, { method: "DELETE" });
+    if (r.ok) load();
+  };
+
+  const agregar = async () => {
+    setErrorAlta(null);
+    if (!alta.zona_comercial.trim() || !alta.agrupante.trim()) {
+      setErrorAlta("Completá zona y agrupante");
+      return;
+    }
+    const r = await fetch("/api/datos-maestros/region-agrupante", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(alta),
+    });
+    if (r.ok) {
+      setMostrarAlta(false);
+      setAlta({ zona_comercial: "", agrupante: "" });
+      load();
+    } else {
+      const d = await r.json().catch(() => null);
+      setErrorAlta(d?.detail || "Error al agregar");
+    }
+  };
+
+  return (
+    <div className="bg-white border border-[#ece6d8] rounded-[18px] shadow-[0_2px_10px_rgba(28,24,17,0.05)] p-6">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-[#1c1811]">Agrupante de Región</h3>
+          <p className="text-[11px] text-[#847c68] mt-0.5">
+            Agrupa cada valor de Región de <code>ig_ventas</code> (zona comercial) en un agrupante previo (Doméstico, Exportación). Usado como filtro de conveniencia en Panel de Ventas / Ventas por Región -- el filtro de Región detallado sigue existiendo igual.
+          </p>
+        </div>
+        {puedeEditar && (
+          <button
+            onClick={() => setMostrarAlta((v) => !v)}
+            className="px-3 py-1.5 rounded-full text-sm font-medium bg-[#7D4E5B] text-white hover:bg-[#9F6375] transition"
+          >
+            {mostrarAlta ? "Cerrar" : "+ Agregar"}
+          </button>
+        )}
+      </div>
+
+      {puedeEditar && mostrarAlta && (
+        <div className="mb-4 p-4 rounded-md border border-[#ece6d8] bg-[#f7f5f0] flex flex-wrap items-end gap-3">
+          <div>
+            <label className="block text-[11px] text-[#847c68] mb-1">Zona Comercial (ig_ventas)</label>
+            <input
+              value={alta.zona_comercial}
+              onChange={(e) => setAlta((s) => ({ ...s, zona_comercial: e.target.value }))}
+              placeholder="ej. ASIA"
+              className="px-2 py-1.5 rounded-md border border-[#ece6d8] text-sm w-48"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-[#847c68] mb-1">Agrupante</label>
+            <input
+              value={alta.agrupante}
+              onChange={(e) => setAlta((s) => ({ ...s, agrupante: e.target.value }))}
+              placeholder="ej. Exportación"
+              className="px-2 py-1.5 rounded-md border border-[#ece6d8] text-sm w-40"
+            />
+          </div>
+          <button
+            onClick={agregar}
+            className="px-3 py-1.5 rounded-full text-sm font-medium bg-[#7D4E5B] text-white hover:bg-[#9F6375] transition"
+          >
+            Agregar
+          </button>
+          {errorAlta && <p className="text-red-600 text-xs w-full">{errorAlta}</p>}
+        </div>
+      )}
+
+      {error && <p className="text-red-600 text-sm mb-3">{error}</p>}
+      {loading ? (
+        <div className="h-64 rounded-md bg-[#f7f5f0] animate-pulse" />
+      ) : (
+        <div className="overflow-x-auto rounded-md border border-[#ece6d8]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-[#f7f5f0]">
+                <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Zona Comercial</th>
+                <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Agrupante</th>
+                {puedeEditar && <th className="w-32" />}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr><td colSpan={puedeEditar ? 3 : 2} className="py-12 text-center text-[#847c68]">No hay filas cargadas</td></tr>
+              ) : rows.map((r) => {
+                const isEditing = editando === r.zona_comercial;
+                return (
+                  <tr key={r.zona_comercial} className="border-t border-[#f3efe4] hover:bg-[#f7f5f0]">
+                    <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">{nombrePropio(r.zona_comercial)}</td>
+                    <td className="py-1.5 px-3 text-[#1c1811] whitespace-nowrap">
+                      {isEditing ? (
+                        <input
+                          value={form.agrupante}
+                          onChange={(e) => setForm((s) => ({ ...s, agrupante: e.target.value }))}
+                          className="px-1.5 py-1 rounded border border-[#d9b38c] text-sm w-40"
+                        />
+                      ) : (
+                        r.agrupante
+                      )}
+                    </td>
+                    {puedeEditar && (
+                      <td className="py-1.5 px-3 text-center whitespace-nowrap">
+                        {isEditing ? (
+                          <>
+                            <button onClick={() => guardar(r.zona_comercial)} className="text-[#7D4E5B] hover:text-[#9F6375] text-xs mr-2">Guardar</button>
+                            <button onClick={() => setEditando(null)} className="text-[#847c68] hover:text-[#5a5342] text-xs">Cancelar</button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => startEdit(r)} className="text-[#7D4E5B] hover:text-[#9F6375] text-xs mr-3">Editar</button>
+                            <button onClick={() => eliminar(r.zona_comercial)} className="text-[#b8860b] hover:text-[#8a6a1f] text-xs">Eliminar</button>
+                          </>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const SUB_TABS = [
   { key: "jurisdiccion", label: "Jurisdicción" },
   { key: "snap", label: "SNAP — Línea de negocio" },
   { key: "canal", label: "Agrupante de Canal" },
   { key: "marca", label: "Agrupante de Marca" },
+  { key: "region", label: "Agrupante de Región" },
 ] as const;
 
 export default function DatosMaestrosPage() {
@@ -890,7 +1081,7 @@ export default function DatosMaestrosPage() {
   const [sub, setSub] = useState<(typeof SUB_TABS)[number]["key"]>("jurisdiccion");
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get("tab");
-    if (tab === "jurisdiccion" || tab === "snap" || tab === "canal" || tab === "marca") setSub(tab);
+    if (tab === "jurisdiccion" || tab === "snap" || tab === "canal" || tab === "marca" || tab === "region") setSub(tab);
   }, []);
 
   return (
@@ -913,6 +1104,7 @@ export default function DatosMaestrosPage() {
       {sub === "snap" && <SnapLineaNegocioMapa />}
       {sub === "canal" && <CanalAgrupanteMapa />}
       {sub === "marca" && <MarcaAgrupanteMapa />}
+      {sub === "region" && <RegionAgrupanteMapa />}
     </AppShell>
   );
 }
