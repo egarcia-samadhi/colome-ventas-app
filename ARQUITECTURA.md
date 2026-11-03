@@ -229,7 +229,7 @@ especificaba).
   Cliente/Cajas9l/Venta Neta/Descuento Comercial/% Desc.
 - Mismo campo real de descuento (`m_desc_total`) y mismo criterio de
   `mg_pct` que `ventas_por_sku` en las 2 funciones nuevas.
-- **Bug real corregido el mismo día** (Ezequiel: "por vendedor el drill
+- **Bug #1 corregido el mismo día** (Ezequiel: "por vendedor el drill
   down no me esta coincidiendo la cantidad"): `DesgloseClienteModal`
   mostraba "Cajas9l" -- pero la tabla PROPIA de Por Vendedor nunca tuvo
   esa columna, solo "Cant." (unidades sueltas, `ventas_por_vendedor`
@@ -237,6 +237,18 @@ especificaba).
   sacó la columna "Cantidad" del modal del todo -- queda 1 sola métrica
   "Caja de 9" en Por SKU y Por Vendedor (Ezequiel: "caja de 9 es lo que
   normaliza el dato, sino no es comparable").
+- **Bug #2 corregido el mismo día** (Ezequiel: "no se que hiciste, pero
+  sigo viendo inconsistencia"). Verificado primero contra la API real en
+  producción (fetch directo) antes de tocar código: `ars`/`descuento`
+  coincidían EXACTO entre la celda y la suma del drill-down -- la capa de
+  datos estaba bien. La causa real era redondeo: "Caja de 9" seguía
+  usando `fmtNum` (0 decimales) -- a nivel de 1 cliente dentro de 1
+  producto(+vendedor), `cajas` es fraccionario chico (ej. 0.4998, 0.4166,
+  0.4166), cada fila redondeaba a "0" pero el Total (suma real) a "1".
+  Fix: `fmtCajas` (2 decimales), usado en los 2 popups de drill-down
+  (`DesgloseMarcaProductoModal` y `DesgloseClienteModal`) -- las tablas
+  principales siguen con `fmtNum`, ahí `cajas` ya viene agregado a nivel
+  producto completo.
 
 Verificado en vivo (Claude-en-Chrome), las 3 vistas: Por Cliente, click en
 "MIRAFLORES SRL" abrió AMALAYA/COLOME/ALTURA MAXIMA por producto (%Desc
