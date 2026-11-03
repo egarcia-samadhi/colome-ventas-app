@@ -127,6 +127,34 @@ def init_db():
             PRIMARY KEY (periodo, linea)
         )
     """)
+    # Budget -> detalle por SKU (2026-11-03, mismo día, pedido explícito de
+    # Ezequiel: "te quedaste corto con la vista del budget, deberiamos
+    # cargar la hoja datos" -- hoja "Datos" de Budget_Dinamico.xlsx, 2.329
+    # filas SKU×mes×Canal×Mercado, la granularidad REAL detrás de los
+    # agregados de `budget_mensual`/`budget_linea_mensual` de arriba.
+    # Verificado ANTES de cargar (pedido explícito: "verificá antes que no
+    # nos cambia el numero actual") que agregar esta hoja por mes/línea
+    # reproduce exacto (centavo a centavo) los 2 JSON ya cargados.
+    #
+    # Pasa a ser la ÚNICA fuente editable ("cada fila tenga un boton de
+    # editar para cambiar los montos o cantidades") -- `budget_mensual`/
+    # `budget_linea_mensual` de arriba quedan en desuso (nunca se borran,
+    # la tabla sigue ahí por si hace falta auditar qué había antes de esta
+    # migración) y `budget.py` las reemplaza por agregados EN VIVO sobre
+    # `budget_detalle`, para que nunca puedan desincronizarse Total/Línea
+    # vs. el detalle por SKU (mismo criterio que "no podemos usar fuentes
+    # distintas", ver snap.py).
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS budget_detalle (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            periodo TEXT NOT NULL,
+            sku TEXT NOT NULL,
+            canal TEXT NOT NULL,
+            mercado TEXT NOT NULL,
+            cajas REAL NOT NULL,
+            usd REAL NOT NULL
+        )
+    """)
     conn.commit()
 
     # Semilla fija (2026-10-07, pedido explícito de Ezequiel: "tiene que ser
@@ -250,6 +278,21 @@ def init_db():
             conn.executemany(
                 "INSERT INTO budget_linea_mensual (periodo, linea, usd, cajas) VALUES (?, ?, ?, ?)",
                 filas,
+            )
+            conn.commit()
+
+    # Semilla de budget_detalle -- vuelca `budget_detalle_2026_2027.json`
+    # (las 2.329 filas de la hoja "Datos" de Budget_Dinamico.xlsx, ya
+    # extraídas con el período calculado) UNA sola vez si la tabla está
+    # vacía.
+    (cantidad,) = conn.execute("SELECT COUNT(*) FROM budget_detalle").fetchone()
+    if cantidad == 0:
+        ruta = Path(__file__).parent / "budget_detalle_2026_2027.json"
+        if ruta.exists():
+            data = json.loads(ruta.read_text(encoding="utf-8"))
+            conn.executemany(
+                "INSERT INTO budget_detalle (periodo, sku, canal, mercado, cajas, usd) VALUES (?, ?, ?, ?, ?, ?)",
+                [(r["periodo"], r["sku"], r["canal"], r["mercado"], r["cajas"], r["usd"]) for r in data],
             )
             conn.commit()
     conn.close()
