@@ -8,7 +8,7 @@ pill flotante, sidebar oscuro `#2b2d31`, acento dorado/bordó) — ver
 antes, creado 2026-10-19 al cerrar la sesión de Otros Análisis — ver norma
 de trabajo "Actualizar ARQUITECTURA.md al cerrar").
 
-Última actualización: 2026-10-22 (formato del popup "Sales by Market" mejorado + FdelMotte llevado al mismo formato que Consolidado en Sales Performance).
+Última actualización: 2026-11-03 (Ventas por Región reemplazada por tabla "Sales by Market" encolumnada Actual/LY/Budget, reemplaza el mapa/árbol anterior).
 
 ## Estructura
 
@@ -1101,6 +1101,98 @@ Verificado con smoke test (datos sintéticos) antes de desplegar, y en
 vivo después: total general y zona de Alemania sin cambios (espejo
 exacto, como se diseñó). Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_pais_zona_mapa`.
+
+## Ventas por Región: reemplazo del mapa por tabla "Sales by Market" (agregado 2026-11-03, mismo día)
+
+Pedido de Ezequiel: *"necesitan que la info de ventas por region, se
+vea encolumnada igual que el snap en la hoja sales by market"*.
+Confirmado el alcance con 2 preguntas: (1) *"reemplaza la info de
+ventas por region"* -- reemplaza el mapa/árbol anterior, no se agrega
+al lado; (2) *"las 3, como el snap, como sales performance"* --
+Actual/Last Year/Budget, no solo Actual. La granularidad usada es la
+misma ZONA de 11 valores que ya existe (no país por país, como tiene
+la hoja Excel original) porque el Budget (`budget_detalle.mercado`) no
+tiene esa granularidad -- confirmado por el propio Ezequiel: *"si ya
+tenemos un ventas por region, y cada region esta asociada en datos
+maestros, cual es el problema?"*.
+
+- **Backend:** `budget.py::MERCADO_A_ZONA` + `get_budget_mercado_mensual()`
+  (`{periodo: {zona: [usd,cajas]}}`, misma fuente que `MERCADO_A_LINEA`).
+  `snap.py::ventas_mercado(desde, hasta_incl)` arma las filas (Domestic:
+  DBA/Interior/NOA/AirLines-fijo-0/DTC/Total Domestic; Export: United
+  States/Canada/Total Caribbean/Total Latin America/Europe/UK and
+  Ireland/Asia Pacific and Middle East/Total Export; Total Branded Wine;
+  Total Buyers Own Brand-fijo-0; TOTAL), reusando `_lineas_vinos()` +
+  `get_pais_zona_map()` (mismo override país→zona que usa
+  `facts_panel_ventas()`). LY = mismo rango -1 año, `None`/n-d antes de
+  `DESDE_HISTORICO` (no hay fixture LFY a nivel de mercado, a diferencia
+  de SBL). Cacheado en `SNAP_RANGE_CACHE`, expuesto en `/api/ventas/snap`
+  como `mercado_mes`/`mercado_ytd` (rama no-FdelMotte).
+  **Gotcha importante si se vuelve a tocar:** `_fila()` busca en
+  `agg`/`bud` por el mismo string que expone como `label` -- acá el
+  nombre a mostrar ("DBA") y la clave real de agregación ("BUENOS
+  AIRES") son distintos, por eso existe el wrapper `_fila_zona()` (arma
+  con la clave real, renombra el label después). No volver a llamar
+  `_fila(label_display, ...)` directo para estas filas.
+- **Frontend:** `content.html::#view-region` reemplaza el mapa
+  (Leaflet)/árbol de región por un mount `.sbl-table-mount`, mismo
+  patrón que Sales Performance. `snap.js::crearSnapInstance()` gana el
+  flag `esMercado` -- reusa `renderSbl()` tal cual (mismo shape de fila
+  que Sales by Line of Business, no hizo falta tabla nueva), agregado a
+  `snapInstances` reusando el mismo `colome-data` que Consolidado (sin
+  fetch extra). `SBL_TOTAL_ROWS` ganó los labels nuevos para negrita.
+  `app.js`: código muerto removido (árbol de región + mapa Leaflet
+  completos, ~230 líneas); sidebar muestra el selector de mes de Sales
+  Performance (`#sbSnap`) en la pestaña Región en vez de los filtros de
+  Panel (`#sbFilt`).
+
+Verificado con smoke test de backend (julio 2026: Total Domestic
+act=276.1K/bud=471.4K) y en vivo en Chrome después del deploy: mismos
+números exactos, toggle Monthly/YTD y selector de mes funcionando, sin
+errores de consola. Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_sales_by_market_en_curso`.
+
+### Desglose país por país dentro de Caribbean/Latin America/Europe/Asia (agregado 2026-11-03, mismo día)
+
+Feedback de Ezequiel al comparar contra la hoja real "Sales by
+Market_D": *"esto por ejemplo no se ve en ningun lado: BrazilColombia
+PeruUruguayParaguayEcuadorLatin America"* -- la primera versión solo
+mostraba el total de la zona, sin las filas de país que sí tiene la
+hoja original. Confirmado el criterio: *"Países con Actual/LY, Budget
+solo en el total de zona"* (el Budget no tiene esa granularidad).
+
+- `snap.py::_agregado_mercado_por_pais()` agrupa `_lineas_vinos()` por
+  `d_pais` crudo (en vez de zona). `ventas_mercado()` arma, para cada
+  zona de exportación con más de 1 país mapeado en `pais_zona_mapa`
+  (Caribbean/Latin America/Europe/Asia -- United States/Canada/UK
+  siguen 1 fila porque mapean a un solo país), las filas de país con
+  Actual/LY reales + el total de zona (con Budget real) después.
+  `SBL_TOTAL_ROWS` (snap.js) ganó los labels de estos subtotales para
+  negrita.
+
+**⚠️ GOTCHA de deploy importante (cache de `SNAP_RANGE_CACHE`
+sobrevive al `docker build`):** el cache de SNAP (`snap.py::
+SNAP_RANGE_CACHE`, archivo en `/data/snap_range_cache.json`, dentro
+del volumen persistente) está diseñado para que un rango YA CERRADO
+nunca cambie -- por eso se cachea sin vencimiento. Pero eso asume que
+solo cambia la DATA (clasificación de línea), nunca la LÓGICA de
+cómputo. Al agregar el desglose por país, el primer deploy no mostró
+nada nuevo en producción porque el `/data/snap_range_cache.json` ya
+tenía las claves `*_mercado` de julio-2026 calculadas con el código
+VIEJO (desde la verificación en vivo del deploy anterior, mismo día) --
+y encima el proceso Python carga ese archivo UNA sola vez a un dict en
+memoria (`_snap_cache_mem`) al primer uso, así que ni siquiera editar
+el archivo en disco alcanza: hace falta que el proceso arranque de
+nuevo para releer. Se resolvió borrando las claves `_mercado` del JSON
+vía `docker exec` + `docker service update --force` (reinicio simple,
+sin rebuild) para forzar una relectura limpia. **Norma para la próxima
+vez que se toque la LÓGICA de `ventas_sbl()`/`ventas_mercado()`/
+`ventas_fdelmotte()` (no solo datos):** después del deploy, limpiar las
+claves del `snap_range_cache.json` afectadas (o llamar
+`limpiar_snap_cache()`/reiniciar el servicio) ANTES de verificar en
+vivo -- si no, la verificación puede devolver "todo sigue igual" por
+estar leyendo el resultado cacheado del código anterior, no porque el
+código nuevo esté mal.
 
 ## Budget: pantalla editable real (agregado 2026-11-03)
 
