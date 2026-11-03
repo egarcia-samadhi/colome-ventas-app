@@ -1098,6 +1098,47 @@ clasificador de seguridad bloqueó escribir un valor de prueba en
 producción (correcto, es un dato financiero real); la lógica UPSERT se
 validó solo contra una DB de prueba local.
 
+### 2da vuelta, mismo día: detalle por SKU (hoja "Datos")
+
+Ezequiel: *"te quedaste corto con la vista del budget, deberiamos
+cargar la hoja datos"* -- la hoja "Datos" de `Budget_Dinamico.xlsx`
+(ruta real: `Compañias\Colome\Informacion recibida\`, FUERA del repo),
+2.329 filas SKU × Mes × Canal × Mercado, la granularidad real detrás
+de los 2 JSON agregados. Pedido explícito: *"verificá antes que no nos
+cambia el numero actual"* -- comparado (script Python fuera del repo)
+contra `budget_2026_2027.json`/`budget_linea_2026_2027.json`: coincide
+EXACTO (diferencia máxima $0.12 en 12 meses, redondeo flotante).
+Confirmado el OK, pidió *"subamos todo y que cada fila tenga un boton
+de editar para cambiar los montos o cantidades"*.
+
+- `budget_detalle_2026_2027.json` (nuevo): las 2.329 filas con
+  `periodo` ya calculado.
+- `database.py`: tabla `budget_detalle`, sembrada desde ese JSON.
+- **`budget_mensual`/`budget_linea_mensual` pasan a estar en desuso**
+  -- `get_budget_mensual()`/`get_budget_linea_mensual()` ahora agregan
+  EN VIVO sobre `budget_detalle` (clasificación Mercado→línea portada
+  a `budget.py::MERCADO_A_LINEA`). Mismo criterio "no podemos usar
+  fuentes distintas" que Sales Performance -- Total/Línea nunca pueden
+  desincronizarse del detalle real.
+- Endpoints nuevos: `GET /api/budget/detalle?periodo=`, `PUT /api/
+  budget/detalle/{id}` (admin, invalida cache incluido
+  `snap.limpiar_snap_cache()`).
+- Frontend: tabla superior (Total + Por Línea) pasa a SOLO LECTURA;
+  sección nueva "Detalle (SKU)" -- selector de período, buscador,
+  botón "Editar" por fila (Caja de 9 + USD, Guardar/Cancelar).
+
+**Verificado en vivo tras el deploy:** Total ejercicio sin cambios
+(USD 10.556.951 / 185.062,75 cajas), tabla de Detalle carga con
+acentos correctos. La escritura no se probó en vivo (mismo motivo que
+la 1ra vuelta); la propagación edición→total sí se validó con smoke
+test local.
+
+**Gotcha de proceso:** el `git push` de este commit fue bloqueado por
+el clasificador de seguridad ("Out-of-Place Publication") -- publicar
+2.329 filas de datos reales de presupuesto al historial de git es más
+sensible que un cambio de código común. Se pidió confirmación
+explícita antes de pushear.
+
 Detalle completo en memoria de Claude, `proyecto_colome_ventas_budget_editable`.
 
 ## Sales Performance: feedback visual + cache de SNAP (agregado 2026-11-03)
