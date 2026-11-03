@@ -399,6 +399,15 @@ function DesgloseClienteModal({ titulo, c_articulo, vendedor, desde, hasta, onCl
   }, [desde, hasta, c_articulo, vendedor]);
 
   const total = rows.reduce((a, f) => ({ cajas: a.cajas + f.cajas, ars: a.ars + f.ars, descuento: a.descuento + f.descuento }), { cajas: 0, ars: 0, descuento: 0 });
+  // Por Vendedor NUNCA tuvo columna Cajas9l en su propia tabla -- muestra
+  // "Cant." (unidades). Mostrar acá Cajas9l con el header "Cajas9l" hacía
+  // pensar que tenía que coincidir con esa "Cant." (bug real reportado
+  // por Ezequiel 2026-11-03: "por vendedor el drill down no me esta
+  // coincidiendo la cantidad"). Se simplificó a 1 sola métrica de
+  // cantidad en el modal, siempre Caja de 9 (nunca unidades sueltas),
+  // mismo dato en las 2 vistas que lo usan (Por SKU y Por Vendedor) --
+  // pedido explícito de Ezequiel: "sacá la columna cantidad, y pone caja
+  // de 9".
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -422,7 +431,7 @@ function DesgloseClienteModal({ titulo, c_articulo, vendedor, desde, hasta, onCl
               <thead>
                 <tr className="bg-[#f7f5f0]">
                   <th className="py-2 px-3 text-left text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cliente</th>
-                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Cajas9l</th>
+                  <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Caja de 9</th>
                   <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Venta Neta</th>
                   <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">Desc. Comercial</th>
                   <th className="py-2 px-3 text-right text-[11px] uppercase tracking-wider font-semibold text-[#5a5342]">% Desc.</th>
