@@ -571,68 +571,34 @@
     body.innerHTML = h;
   }
 
-  // ---------- Ventas por Región: mapa/árbol "al pie" de Sales by Market
-  // (recuperado 2026-11-04, Ezequiel: "tenemos forma de recuperar el mapa
-  // que teniamos al pie?" -- se había sacado el 2026-11-03 al reemplazar
-  // esta pestaña por la tabla Sales by Market, ver commit dee5a3f. Mismo
-  // código de entonces, sin cambios, reinsertado debajo de la tabla nueva
-  // en vez de reemplazarla -- usa los filtros del sidebar de Panel
-  // (#sbFilt), que ahora conviven con el selector de mes de Sales by
-  // Market (#sbSnap) en esta misma pestaña.) ----------
-  const openZ = new Set(), openP = new Set();
-  let TREE = [];
-  function buildTree(rows) {
-    return groupBy(rows, I.zona).sort((a, b) => b.usd - a.usd).map(z => {
-      const rz = rows.filter(f => f[I.zona] === z.k);
-      const ps = groupBy(rz, I.pais).sort((a, b) => b.usd - a.usd).map(p =>
-        Object.assign({}, p, { clientes: groupBy(rz.filter(f => f[I.pais] === p.k), I.cliente).sort((a, b) => b.usd - a.usd) }));
-      return Object.assign({}, z, { paises: ps });
-    });
-  }
-  function rgRow(cls, label, a, tot, key) {
-    const g = gm(a), open = cls === 'rg' ? openZ.has(key) : openP.has(key);
-    return `<tr class="${cls}" ${key ? `data-k="${esc(key)}" tabindex="0" aria-expanded="${open}"` : ''}><td class="l">${label}</td><td class="n">${money(a.usd)}</td><td class="n">${int(a.cajas)}</td><td class="n">${price(avgPrice(a))}</td><td class="n">${g === null ? '—' : pct(g)}</td><td class="n">${pct(tot.usd ? a.usd / tot.usd : 0)}</td></tr>`;
-  }
-  function renderRegion() {
-    const rows = rowsFiltradas();
-    if (!rows.length) { TREE = []; $('rgTable').innerHTML = '<div class="empty">Sin datos para la selección de filtros.</div>'; syncRgToggle(); return; }
-    TREE = buildTree(rows);
-    const tot = total(rows), g = gm(tot);
-    let h = '<table class="tight" style="min-width:680px"><thead><tr><th class="l">Nivel / detalle</th><th class="n">US$ Ingresos</th><th class="n">Cajas 9L</th><th class="n">Precio prom.</th><th class="n">% GM</th><th class="n">% Part.</th></tr></thead><tbody>';
-    TREE.forEach(z => {
-      const zk = 'z:' + z.k, zo = openZ.has(zk);
-      h += rgRow('rg', `${zo ? '▼' : '▶'} ${esc(nombrePropio(D.zona[z.k]))}`, z, tot, zk);
-      if (!zo) return;
-      z.paises.forEach(p => {
-        const pk = `p:${z.k}::${p.k}`, po = openP.has(pk);
-        h += rgRow('ps', `${po ? '▼' : '▶'} 📍 ${esc(nombrePropio(D.pais[p.k]))}`, p, tot, pk);
-        if (po) p.clientes.forEach(c => { h += rgRow('cl', `👤 ${esc(nombrePropio(D.cliente[c.k]))}`, c, tot, null); });
-      });
-    });
-    h += `</tbody><tfoot><tr class="total"><td class="l">Total</td><td class="n">${money(tot.usd)}</td><td class="n">${int(tot.cajas)}</td><td class="n">${price(avgPrice(tot))}</td><td class="n">${g === null ? '—' : pct(g)}</td><td class="n">${pct(1)}</td></tr></tfoot></table>`;
-    $('rgTable').innerHTML = h;
-    syncRgToggle();
-  }
-  const todoAbierto = () => TREE.length > 0 && TREE.every(z => openZ.has('z:' + z.k) && z.paises.every(p => openP.has(`p:${z.k}::${p.k}`)));
-  function syncRgToggle() {
-    const b = $('rgToggle'), ab = todoAbierto();
-    b.textContent = ab ? '▶ Colapsar todo' : '▼ Expandir todo';
-    b.disabled = TREE.length === 0;
-  }
-  function toggleKey(k) {
-    const s = k.indexOf('z:') === 0 ? openZ : openP;
-    if (s.has(k)) s.delete(k); else s.add(k);
-    renderRegion();
-  }
-
-  // ---------- mapa (Leaflet cargado bajo demanda; si no hay conexión el resto sigue andando) ----------
-  const COORD_PAIS = { 'ARGENTINA': [-38.4, -63.6], 'REINO UNIDO': [54, -2], 'FRANCIA': [46.6, 2.4], 'LETONIA': [56.9, 24.6], 'MEXICO': [23.6, -102.5],
-    'PARAGUAY': [-23.4, -58.4], 'ALEMANIA': [51.2, 10.4], 'COSTA RICA': [9.9, -84.1], 'CANADA': [56.1, -106.3] };
+  // ---------- Ventas por Región: mapa "al pie" de Sales by Market
+  // (recuperado 2026-11-04 del commit previo a dee5a3f, luego Ezequiel:
+  // "Región → País → Cliente, sacaria esta tabla y usaria las regiones
+  // de Sales by Market" -- se saca el árbol Región/País/Cliente y el mapa
+  // deja de ubicar país por país con coordenadas sueltas (`COORD_PAIS`
+  // solo cubría 9 de los 30 países reales, el resto cae siempre en "sin
+  // ubicación") y pasa a agrupar por las MISMAS 11 zonas que usa Sales by
+  // Market/Datos Maestros (`D.zona`/`I.zona`, el campo crudo
+  // `d_zona_comercial` de Redline, idéntico a las claves de
+  // `ZONA_DOMESTIC`/`ZONA_EXPORT` de `snap.py`) -- cubre el 100% sin
+  // huecos. Las 4 zonas domésticas (BUENOS AIRES/INTERIOR/NOA/DTC) no son
+  // ubicables en un mapa mundial, se agrupan en un solo punto
+  // "Argentina (Doméstico)". Usa los filtros del sidebar de Panel
+  // (#sbFilt), que convive con el selector de mes de Sales by Market
+  // (#sbSnap) en esta misma pestaña. ----------
   const COORD_PROV = { 'CABA': [-34.61, -58.44], 'BUENOS AIRES': [-36.5, -60.3], 'SALTA': [-24.79, -65.41], 'LA PAMPA': [-36.62, -64.29], 'ENTRE RIOS': [-31.75, -59.2],
     'MENDOZA': [-32.89, -68.84], 'MISIONES': [-27.37, -55.9], 'CORRIENTES': [-28.0, -58.0], 'SANTA FE': [-31.0, -60.9], 'CORDOBA': [-31.42, -64.18],
     'CHACO': [-26.5, -60.5], 'NEUQUEN': [-38.95, -68.06], 'JUJUY': [-23.0, -65.6], 'TUCUMAN': [-26.82, -65.22], 'SAN JUAN': [-31.54, -68.52],
     'RIO NEGRO': [-40.8, -67.5], 'CHUBUT': [-43.3, -68.5], 'SAN LUIS': [-33.3, -66.34], 'TIERRA DEL FUEGO': [-54.0, -67.9] };
-  let map = null, layer = null, mapModo = 'pais', lfState = 'idle';
+  const ZONA_DOMESTICA = new Set(['BUENOS AIRES', 'INTERIOR', 'NOA', 'DTC']);
+  const ZONA_COORD = { 'ARGENTINA': [-38.4, -63.6], 'UNITED STATES': [39, -98], 'CANADA': [56, -106],
+    'CARIBBEAN': [18, -66], 'LATIN AMERICA': [-15, -60], 'EUROPE': [50, 10], 'UK': [54, -2], 'ASIA': [25, 55] };
+  const ZONA_LABEL = { 'ARGENTINA': 'Argentina (Doméstico)', 'UNITED STATES': 'United States', 'CANADA': 'Canada',
+    'CARIBBEAN': 'Caribbean', 'LATIN AMERICA': 'Latin America', 'EUROPE': 'Europe', 'UK': 'UK and Ireland', 'ASIA': 'Asia Pacific and Middle East' };
+  const zonaDisplay = raw => ZONA_DOMESTICA.has(raw) ? 'ARGENTINA' : raw;
+
+  // ---------- mapa (Leaflet cargado bajo demanda; si no hay conexión el resto sigue andando) ----------
+  let map = null, layer = null, mapModo = 'zona', lfState = 'idle';
   const lfWait = [];
   function loadLeaflet(cb) {
     if (window.L) { cb(true); return; }
@@ -648,23 +614,37 @@
   }
   function mapPoints(all) {
     const isProv = mapModo === 'prov';
-    const rows = isProv ? all.filter(f => D.pais[f[I.pais]] === 'ARGENTINA') : all;
-    const idx = isProv ? I.provincia : I.pais, dimName = isProv ? 'provincia' : 'pais', coords = isProv ? COORD_PROV : COORD_PAIS;
+    if (isProv) {
+      const rows = all.filter(f => D.pais[f[I.pais]] === 'ARGENTINA');
+      const pts = [], sin = zero();
+      groupBy(rows, I.provincia).forEach(a => {
+        const raw = D.provincia[a.k];
+        const top = groupBy(rows.filter(f => f[I.provincia] === a.k), I.cliente).sort((x, y) => y.usd - x.usd)[0];
+        if (COORD_PROV[raw]) pts.push({ raw, a, top }); else { sin.usd += a.usd; sin.cajas += a.cajas; }
+      });
+      return { pts, sin, rows };
+    }
+    const rows = all, porZona = new Map();
+    rows.forEach(f => {
+      const key = zonaDisplay(D.zona[f[I.zona]]);
+      let a = porZona.get(key);
+      if (!a) { a = zero(); a.k = key; porZona.set(key, a); }
+      add(a, f);
+    });
     const pts = [], sin = zero();
-    groupBy(rows, idx).forEach(a => {
-      const raw = D[dimName][a.k];
-      const top = groupBy(rows.filter(f => f[idx] === a.k), I.cliente).sort((x, y) => y.usd - x.usd)[0];
-      if (coords[raw]) pts.push({ raw, a, top }); else { sin.usd += a.usd; sin.cajas += a.cajas; }
+    porZona.forEach((a, raw) => {
+      const top = groupBy(rows.filter(f => zonaDisplay(D.zona[f[I.zona]]) === raw), I.cliente).sort((x, y) => y.usd - x.usd)[0];
+      if (ZONA_COORD[raw]) pts.push({ raw, a, top }); else { sin.usd += a.usd; sin.cajas += a.cajas; }
     });
     return { pts, sin, rows };
   }
   function drawMap() {
     const box = $('mapBox'), isProv = mapModo === 'prov';
     const mp = mapPoints(rowsFiltradas()), pts = mp.pts, sin = mp.sin, totR = total(mp.rows);
-    $('mapTitle').textContent = isProv ? 'Mapa — Argentina por provincia' : 'Mapa Mundial — Ventas por País';
+    $('mapTitle').textContent = isProv ? 'Mapa — Argentina por provincia' : 'Mapa Mundial — Ventas por Región (Sales by Market)';
     $('mapNote').textContent = !mp.rows.length ? 'Sin datos para la selección de filtros.' : (isProv ? 'Provincias de Argentina. ' : '') + (sin.usd === 0
-      ? (isProv ? 'Todas las ventas de Argentina tienen provincia cargada.' : 'Todas las ventas tienen país cargado.')
-      : `Sin ubicación en el mapa (${isProv ? 'sin provincia cargada en Redline' : 'sin país cargado en Redline, zona DTC'}): ${money(sin.usd)} — ${pct(totR.usd ? sin.usd / totR.usd : 0)} de ${isProv ? 'las ventas de Argentina' : 'las ventas del filtro'}.`);
+      ? (isProv ? 'Todas las ventas de Argentina tienen provincia cargada.' : 'Todas las zonas tienen ubicación.')
+      : `Sin ubicación en el mapa (${isProv ? 'sin provincia cargada en Redline' : 'zona sin coordenada asignada'}): ${money(sin.usd)} — ${pct(totR.usd ? sin.usd / totR.usd : 0)} de ${isProv ? 'las ventas de Argentina' : 'las ventas del filtro'}.`);
     if (!window.L) return;
     if (!map) {
       box.innerHTML = ''; box.style.display = 'block';
@@ -673,11 +653,12 @@
       layer = L.layerGroup().addTo(map);
     }
     layer.clearLayers();
-    const mx = Math.max.apply(null, pts.map(p => p.a.usd).concat([1])), coords = isProv ? COORD_PROV : COORD_PAIS, rmax = isProv ? 17 : 26;
+    const mx = Math.max.apply(null, pts.map(p => p.a.usd).concat([1])), coords = isProv ? COORD_PROV : ZONA_COORD, rmax = isProv ? 17 : 26;
     pts.forEach(p => {
+      const nombre = isProv ? nombrePropio(p.raw) : (ZONA_LABEL[p.raw] || nombrePropio(p.raw));
       const top = p.top ? `<div style="margin-top:6px;font-size:11px;color:#5b6b85">Top cliente: <b>${esc(nombrePropio(D.cliente[p.top.k]))}</b> (${money(p.top.usd)})</div>` : '';
       L.circleMarker(coords[p.raw], { radius: 5 + Math.sqrt(Math.max(p.a.usd, 0) / mx) * rmax, color: '#7D4E5B', fillColor: '#DCBE84', fillOpacity: 0.6, weight: 1.8 })
-        .bindPopup(`<div><div style="font-weight:600;color:#14110c;margin-bottom:4px">${esc(nombrePropio(p.raw))}</div><div style="font-size:12px;color:#4a4030">Ventas: ${money(p.a.usd)}</div><div style="font-size:12px;color:#33415a">Cajas 9L: ${int(p.a.cajas)}</div><div style="font-size:12px;color:#33415a">Precio prom.: ${price(avgPrice(p.a))}</div>${top}</div>`)
+        .bindPopup(`<div><div style="font-weight:600;color:#14110c;margin-bottom:4px">${esc(nombre)}</div><div style="font-size:12px;color:#4a4030">Ventas: ${money(p.a.usd)}</div><div style="font-size:12px;color:#33415a">Cajas 9L: ${int(p.a.cajas)}</div><div style="font-size:12px;color:#33415a">Precio prom.: ${price(avgPrice(p.a))}</div>${top}</div>`)
         .addTo(layer);
     });
     if (isProv) map.fitBounds([[-55, -74], [-22, -53]]); else map.setView([15, 10], 2);
@@ -688,7 +669,7 @@
     if (window.L) return;
     loadLeaflet(ok => {
       if (ok) drawMap();
-      else $('mapBox').textContent = 'No se pudo cargar el mapa (requiere conexión a internet). La tabla de arriba tiene los mismos datos.';
+      else $('mapBox').textContent = 'No se pudo cargar el mapa (requiere conexión a internet).';
     });
   }
 
@@ -697,7 +678,7 @@
   const TITULOS = { snap: 'Sales Performance', panel: 'Panel de Ventas', region: 'Ventas por Región' };
   function refresh() {
     renderPanel();
-    if (st.vista === 'region') { renderRegion(); drawMap(); }
+    if (st.vista === 'region') drawMap();
   }
   function show(v) {
     if (!VIEWS[v]) v = 'panel';
@@ -705,16 +686,16 @@
     Object.keys(VIEWS).forEach(k => { $(VIEWS[k]).hidden = k !== v; });
     // Ventas por Región (2026-11-03, "se vea encolumnada igual que el snap
     // en la hoja sales by market"): la tabla Sales by Market de arriba usa
-    // el selector de mes de Sales Performance (#sbSnap); el mapa/árbol
-    // recuperado "al pie" (2026-11-04, ver comentario más arriba) sigue
-    // usando los filtros de Panel (#sbFilt) -- los 2 sidebars conviven
-    // SOLO en esta vista, cada uno gobierna su propia sección.
+    // el selector de mes de Sales Performance (#sbSnap); el mapa "al pie"
+    // (2026-11-04, ver comentario más arriba) sigue usando los filtros de
+    // Panel (#sbFilt) -- los 2 sidebars conviven SOLO en esta vista, cada
+    // uno gobierna su propia sección.
     $('sbSnap').hidden = v !== 'snap' && v !== 'region';
     $('sbFilt').hidden = v === 'snap';
     $('sbTitle').textContent = TITULOS[v];
     if (v !== 'region' && map) { map.remove(); map = null; layer = null; $('mapBox').textContent = 'Cargando mapa…'; $('mapBox').style.display = ''; } // libera las capas del mapa al salir de la vista
     document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.view === v)));
-    if (v === 'region') { renderRegion(); initMap(); }
+    if (v === 'region') initMap();
     try { history.replaceState(null, '', '#' + v); } catch (e) { /* file:// puede bloquearlo */ }
   }
   document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => show(b.dataset.view)));
@@ -772,15 +753,6 @@
     if (st.dgSort === col) { st.dgDir = st.dgDir === 'asc' ? 'desc' : 'asc'; }
     else { st.dgSort = col; st.dgDir = col === 'nombre' ? 'asc' : 'desc'; }
     renderPanel();
-  });
-  const rgT = $('rgTable');
-  rgT.addEventListener('click', e => { const tr = e.target.closest('tr[data-k]'); if (tr) toggleKey(tr.dataset.k); });
-  rgT.addEventListener('keydown', e => { if (e.key !== 'Enter' && e.key !== ' ') return; const tr = e.target.closest('tr[data-k]'); if (tr) { e.preventDefault(); toggleKey(tr.dataset.k); } });
-  // Un solo botón cuyo texto y acción dependen del estado real del árbol (norma: nunca "Expandir todo" con todo ya expandido)
-  $('rgToggle').addEventListener('click', () => {
-    if (todoAbierto()) { openZ.clear(); openP.clear(); }
-    else TREE.forEach(z => { openZ.add('z:' + z.k); z.paises.forEach(p => openP.add(`p:${z.k}::${p.k}`)); });
-    renderRegion();
   });
   $('view-region').addEventListener('change', e => {
     if (e.target.name === 'mapModo') { mapModo = e.target.value; drawMap(); }
