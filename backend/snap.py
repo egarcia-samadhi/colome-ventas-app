@@ -1024,6 +1024,65 @@ def _agregado_mercado_con_lfy(desde: date, hasta_incl: date) -> dict[str, list[f
     return acc
 
 
+LFY_MERCADO_PAIS_RUTA = Path(__file__).parent / "lfy_mercado_pais_jul_ago_2025.json"
+_lfy_mercado_pais_cache: dict[tuple[str, str], list[float]] | None = None
+
+
+def _lfy_mercado_pais_agregado() -> dict[tuple[str, str], list[float]]:
+    """jul-ago 2025 a nivel de PAÍS crudo (`d_pais`, ej. "BRASIL"),
+    extraído de la hoja "Sales by Market_D" del mismo `YTD - Snap -
+    ly.xlsx` (la hoja gruesa "Sales by Market" no desglosa país -- ver
+    `_lfy_mercado_agregado`). Mismo método Monthly/YTD->julio solo que la
+    fixture de zona. Solo tiene entradas para los países con venta real en
+    jul u ago 2025 (9 de los 30 de `pais_zona_mapa`) -- el resto, sin
+    fixture, simplemente no suma nada para esos 2 meses (consistente con
+    que en la hoja real dan 0). Pedido de Ezequiel 2026-11-04 al revisar
+    el fix de zona: *"nosotros ya sabemos cuanto da jul y agos 2025
+    juntos, no?"* -- sí, está en esta misma hoja del SNAP real.
+    **Verificado:** sumando estos países por zona (vía el mismo
+    `pais_zona_mapa`) se reproduce exacto cada total de zona de
+    `lfy_mercado_jul_ago_2025.json`, jul y ago por separado."""
+    global _lfy_mercado_pais_cache
+    if _lfy_mercado_pais_cache is None:
+        raw = json.loads(LFY_MERCADO_PAIS_RUTA.read_text(encoding="utf-8"))
+        _lfy_mercado_pais_cache = {}
+        for k, v in raw.items():
+            periodo, pais = k.split("|", 1)
+            _lfy_mercado_pais_cache[(periodo, pais)] = v
+    return _lfy_mercado_pais_cache
+
+
+def _agregado_mercado_por_pais_con_lfy(desde: date, hasta_incl: date) -> dict[str, list[float]]:
+    """Igual que `_agregado_mercado_por_pais`, pero completa con la
+    fixture LFY de país (ver arriba) los meses del rango anteriores a
+    `DESDE_HISTORICO` -- mismo patrón que `_agregado_mercado_con_lfy` a
+    nivel de zona."""
+    acc: dict[str, list[float]] = {}
+    lfy = None
+    for anio, mes in _meses_en_rango(desde, hasta_incl):
+        mes_ini = date(anio, mes, 1)
+        mes_fin_excl = date(anio + 1, 1, 1) if mes == 12 else date(anio, mes + 1, 1)
+        mes_fin = mes_fin_excl - timedelta(days=1)
+        d0, d1 = max(mes_ini, desde), min(mes_fin, hasta_incl)
+        if mes_ini < DESDE_HISTORICO:
+            if lfy is None:
+                lfy = _lfy_mercado_pais_agregado()
+            periodo = f"{anio:04d}-{mes:02d}"
+            for (p, pais), v in lfy.items():
+                if p != periodo:
+                    continue
+                a = acc.setdefault(pais, [0.0, 0.0, 0.0])
+                for i in range(3):
+                    a[i] += v[i]
+        else:
+            sub = _agregado_mercado_por_pais(d0, d1)
+            for pais, v in sub.items():
+                a = acc.setdefault(pais, [0.0, 0.0, 0.0])
+                for i in range(3):
+                    a[i] += v[i]
+    return acc
+
+
 def _agregado_mercado_budget(desde: date, hasta_incl: date) -> dict[str, list[float]] | None:
     """Suma Budget por zona para [desde, hasta_incl] -- `None` si falta la
     fixture de ALGUNO de los meses del rango (mismo criterio que
@@ -1062,18 +1121,18 @@ def ventas_mercado(desde: date, hasta_incl: date) -> list[dict | None]:
     fiscal arranca en julio) quedaba sin LY: `DESDE_HISTORICO` (set-2025)
     es posterior al inicio del ejercicio, por eso acá el corte es
     `LFY_DESDE` (jul-2025), no `DESDE_HISTORICO`. El desglose por PAÍS
-    (`agg_pais`/`ly_pais`) NO tiene fixture a esa granularidad -- sigue
-    con el corte viejo (`DESDE_HISTORICO`), así que los países bajo cada
-    zona quedan sin LY para jul-ago 2025 aunque el total de zona sí lo
-    tenga (mismo criterio: no inventar un desglose que no existe)."""
+    (`agg_pais`/`ly_pais`) usa su PROPIA fixture
+    (`lfy_mercado_pais_jul_ago_2025.json`, ver `_lfy_mercado_pais_agregado`),
+    extraída de la hoja "Sales by Market_D" del mismo SNAP -- mismo corte
+    `LFY_DESDE` que la zona (agregado 2026-11-04, Ezequiel: "nosotros ya
+    sabemos cuanto da jul y agos 2025 juntos, no?")."""
     agg = _agregado_mercado(desde, hasta_incl)
     agg_pais = _agregado_mercado_por_pais(desde, hasta_incl)
     desde_ly = date(desde.year - 1, desde.month, desde.day)
     hasta_ly = date(hasta_incl.year - 1, hasta_incl.month, hasta_incl.day)
     con_ly = desde_ly >= LFY_DESDE
-    con_ly_pais = desde_ly >= DESDE_HISTORICO
     ly = _agregado_mercado_con_lfy(desde_ly, hasta_ly) if con_ly else None
-    ly_pais = _agregado_mercado_por_pais(desde_ly, hasta_ly) if con_ly_pais else None
+    ly_pais = _agregado_mercado_por_pais_con_lfy(desde_ly, hasta_ly) if con_ly else None
     bud = _agregado_mercado_budget(desde, hasta_incl)
 
     domestic_rows = [_fila_zona(label, zona, agg, ly, bud) for label, zona in ZONA_DOMESTIC]
