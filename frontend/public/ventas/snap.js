@@ -13,7 +13,7 @@ function fmtNum(v, dec) {
 }
 function fmtPct(v) {
   if (v === null || v === undefined || v === '') return '—';
-  if (v === 'N/A') return 'N/A';
+  if (v === 'N/A') return '-'; // misma norma que fmtUsd/fmtNum: "-" en vez de "N/A" (pedido de Ezequiel 2026-11-03)
   if (typeof v !== 'number') return v;
   return (v*100).toFixed(1) + '%';
 }
