@@ -56,5 +56,31 @@
             <div class="sbl-table-mount"></div>
           </section>
         </div>
+
+        <!-- Mapa/árbol de región -- recuperado "al pie" 2026-11-04 (se había sacado el 2026-11-03 al agregar la tabla Sales by Market de arriba). Usa los filtros del sidebar de Panel (#sbFilt), que ahora convive con el selector de mes de arriba. -->
+        <div class="bar-top">
+          <span class="pill">Ejercicio Fiscal - 2026-2027</span>
+          <span class="hint" style="margin:0">Región = Zona Comercial de Redline. Los filtros del panel lateral aplican a la tabla y al mapa de abajo.</span>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>Región → País → Cliente</h3>
+            <div style="display:flex;gap:8px">
+              <button class="btn" id="rgToggle">▼ Expandir todo</button>
+            </div>
+          </div>
+          <div class="scroll-x" style="border:1px solid var(--line)"><div id="rgTable"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3 id="mapTitle">Mapa Mundial — Ventas por País</h3>
+            <div class="seg" role="radiogroup" aria-label="Nivel del mapa">
+              <label><input type="radio" name="mapModo" value="pais" checked> Por país</label>
+              <label><input type="radio" name="mapModo" value="prov"> Argentina por provincia</label>
+            </div>
+          </div>
+          <div id="mapBox">Cargando mapa…</div>
+          <div class="hint" id="mapNote"></div>
+        </div>
       </div>
 
