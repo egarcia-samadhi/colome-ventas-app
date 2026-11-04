@@ -1036,12 +1036,13 @@ Verificado en vivo: tras el fix, `/api/controles` → `{"ok": false,
 en pantalla como fila naranja. Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_cruce_afip_mes_pendiente`.
 
-**Pendiente relacionado, del mismo pedido de Ezequiel (NO
-implementado, diagnosticado solamente -- ver memoria de Claude
-`proyecto_colome_ventas_pendientes_controles_budget_region`):**
-Ventas por Región (el mapa) no muestra LY -- recomendación dada:
-agregarlo como una 4ta vista "Por Región" en Otros Análisis en vez de
-al mapa, para no complicar la lectura geográfica.
+**Pendiente relacionado, del mismo pedido de Ezequiel -- RESUELTO
+2026-11-04, ver sección "Ventas por Región: fix YTD sin LY" más abajo.**
+La recomendación original (4ta vista en Otros Análisis) quedó
+descartada: el fix real fue agregar LY al YTD de la tabla Sales by
+Market que ya existe, no una vista nueva. El mapa de región (que en su
+momento era el que no mostraba LY) ya no existe como tal -- ver sección
+"Mapa de región agrupa por zona" más abajo.
 
 ## Panel de Ventas: filtro previo "Agrupante de Región" (agregado 2026-11-03)
 
@@ -1370,6 +1371,98 @@ indicador de que estaba cargando.
 
 Detalle completo en memoria de Claude,
 `proyecto_colome_ventas_sales_performance_feedback_y_cache`.
+
+## Ventas por Región: fix YTD sin LY (agregado 2026-11-04)
+
+Pedido de Ezequiel: *"en ventas por region, no esta calculando el ytd
+ly"*. Causa real: `ventas_mercado()` calculaba el LY todo-o-nada para
+el rango completo (`con_ly = desde_ly >= DESDE_HISTORICO`, 2025-09-01).
+El ejercicio fiscal arranca en **julio**, así que el YTD siempre tiene
+`desde_ly` = julio del año anterior, ANTERIOR a `DESDE_HISTORICO` -- el
+LY del YTD quedaba `None` de punta a punta, aunque sí había datos reales
+desde septiembre en adelante. Mismo hueco que ya tenía Sales by Line of
+Business (SBL) antes de su fixture `lfy_jul_ago_2025.json`, pero mercado
+no tenía el equivalente (esa fixture es por LÍNEA de negocio, no por
+zona).
+
+- **Fix (zona), commit `fa64190`:** Ezequiel aportó `YTD - Snap -
+  ly.xlsx` (SNAP real que manda Ariel, corte agosto-2025, columnas
+  Monthly=agosto y YTD=julio+agosto acumulado -- julio solo = YTD -
+  Monthly). Se extrajo jul-ago 2025 por ZONA de la hoja "Sales by
+  Market" -- `backend/lfy_mercado_jul_ago_2025.json`. **Verificado
+  exacto:** la suma de las 11 zonas (jul+ago) reproduce el "Total
+  Branded Wine" YTD de la hoja, USD 1.577.524,07 centavo a centavo.
+  `_lfy_mercado_agregado()` + `_agregado_mercado_con_lfy()` (mismo
+  patrón que `_lfy_agregado()`/`_agregado_sbl_con_lfy()` de SBL).
+  `ventas_mercado()`: el corte de LY del TOTAL de zona pasa de
+  `DESDE_HISTORICO` a `LFY_DESDE` (julio-2025).
+- **Fix (país), commit `2f63a9d`, mismo día:** Ezequiel: *"nosotros ya
+  sabemos cuanto da jul y agos 2025 juntos, no?"* -- sí, la hoja "Sales
+  by Market_D" del mismo archivo trae el desglose PAÍS por país de esos
+  2 meses. Se extrajeron los 9 países con venta real (ESTADOS
+  UNIDOS/CANADA/BRASIL/URUGUAY/ALEMANIA/FRANCIA/BELGICA/REINO
+  UNIDO/AUSTRALIA, mapeados del label en inglés de la hoja al `d_pais`
+  crudo en español vía `pais_zona_mapa`) --
+  `backend/lfy_mercado_pais_jul_ago_2025.json`. **Verificado doble:**
+  sumando estos 9 países por zona se reproduce exacto cada total de
+  zona del fix anterior (jul y ago por separado). `_lfy_mercado_pais_
+  agregado()` + `_agregado_mercado_por_pais_con_lfy()`, mismo patrón.
+- **`Dockerfile`:** agregadas ambas fixtures nuevas al `COPY`.
+
+Verificado en producción (exec directo a `ventas_mercado()` en el
+contenedor, YTD del ejercicio en curso): TOTAL act=2.487,57K/ly=2.736,41K
+(antes `ly=None`); Brasil/Uruguay/Alemania/United States/Canada con
+`usd_ly` real también a nivel de país. **Gotcha de deploy (ya conocido,
+ver sección de cache más abajo):** hubo que limpiar las claves
+`*_mercado` de `/data/snap_range_cache.json` + reiniciar el servicio
+después de cada deploy de este fix, igual que con el desglose por país
+del 2026-11-03.
+
+Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_fix_ytd_ly_region`.
+
+## Ventas por Región: árbol sacado, mapa agrupa por zona (agregado 2026-11-04)
+
+Dos pedidos seguidos de Ezequiel el mismo día, sobre lo que había
+quedado "al pie" de la tabla Sales by Market desde el 2026-11-03:
+
+1. *"tenemos forma de recuperar el mapa que teniamos al pie?"* -- se
+   recuperó el código exacto del commit previo a `dee5a3f` (mapa
+   Leaflet + árbol Región→País→Cliente) y se reinsertó DEBAJO de la
+   tabla Sales by Market, no reemplazándola. Como el mapa/árbol usa los
+   filtros de Panel (`#sbFilt`, `rowsFiltradas()`) y la tabla de arriba
+   usa el selector de mes de Sales Performance (`#sbSnap`), los 2
+   sidebars conviven SOLO en esta vista (antes eran mutuamente
+   excluyentes por vista, ver `show()`/`refresh()` en `app.js`).
+   Commit `087b64a`.
+2. *"Región → País → Cliente, sacaria esta tabla y usaria las regiones
+   de Sales by Market"* -- mismo día, se sacó el árbol expandible del
+   todo (`buildTree`/`rgRow`/`renderRegion`/`toggleKey`/etc., removidos
+   de `app.js`). El mapa (único elemento que queda al pie) dejó de
+   ubicar país por país con `COORD_PAIS` (diccionario viejo, cubría
+   solo 9 de los 30 países reales -- el resto SIEMPRE caía en "sin
+   ubicación", un hueco real en los datos mostrados) y pasa a agrupar
+   por las MISMAS 11 zonas que usa Sales by Market/Datos Maestros
+   (`D.zona`/`I.zona`, el campo crudo `d_zona_comercial`, idéntico a
+   las claves `ZONA_DOMESTIC`/`ZONA_EXPORT` de `snap.py`) -- cubre el
+   100% sin huecos. Nuevo `ZONA_COORD`/`ZONA_LABEL`/`ZONA_DOMESTICA` en
+   `app.js`: las 4 zonas domésticas (BUENOS AIRES/INTERIOR/NOA/DTC) no
+   son ubicables en un mapa mundial, se agrupan en un solo punto
+   "Argentina (Doméstico)". El toggle "Argentina por provincia" se
+   mantuvo igual (drill-down aparte, no tocado). Commit `79c1b59`.
+
+**Nota para el futuro:** el mapa agrupa por el campo CRUDO
+`d_zona_comercial` (`D.zona`), no por el override `pais_zona_mapa` que
+sí usa el backend (`_agregado_mercado()`). En la práctica coinciden
+porque `pais_zona_mapa` arrancó como espejo exacto del dato crudo, pero
+si alguien reclasifica un país en Datos Maestros sin que coincida con
+la zona cruda de Redline, el mapa (frontend) y la tabla Sales by Market
+(backend) podrían divergir en ese país puntual -- no se replicó el
+override en JS por simplicidad.
+
+Ambos cambios desplegados y verificados (`/api/auth/me` 401 post-deploy
+en cada uno). Detalle completo en memoria de Claude,
+`proyecto_colome_ventas_sales_by_market_en_curso`.
 
 ## Deploy
 
