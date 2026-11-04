@@ -1026,8 +1026,14 @@ def ventas_mercado(desde: date, hasta_incl: date) -> list[dict | None]:
         export_totales.append(total_zona)
         paises = sorted(paises_por_zona.get(zona, []))
         if len(paises) > 1:
+            # Pedido de Ezequiel 2026-11-03: "todas las lineas que esten en
+            # cero, no tiene sentido exponerlas" -- se omite un país si no
+            # tuvo actividad NI en el período actual NI en LY (0 y 0); si
+            # tuvo ventas en cualquiera de los dos queda, aunque el otro sea
+            # cero (ej. caída real a 0 este año es un dato, no ruido).
+            filas_pais = [_fila_zona(pais.title(), pais, agg_pais, ly_pais, None) for pais in paises]
             export_rows_display.extend(
-                _fila_zona(pais.title(), pais, agg_pais, ly_pais, None) for pais in paises
+                f for f in filas_pais if f["usd_act"] != 0 or (f["usd_ly"] or 0) != 0
             )
         export_rows_display.append(total_zona)
 
