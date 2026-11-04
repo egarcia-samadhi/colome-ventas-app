@@ -1194,6 +1194,25 @@ vivo -- si no, la verificación puede devolver "todo sigue igual" por
 estar leyendo el resultado cacheado del código anterior, no porque el
 código nuevo esté mal.
 
+### 2 ajustes finos de Sales by Market, mismo día (2026-11-03)
+
+- **"-" en vez de "N/A":** pedido de Ezequiel *"no pueden decir n/a,
+  tienen que decir '-', sinonimo de 0"* -- `snap.js::fmtPct()` era la
+  única función de formato que todavía devolvía el texto `"N/A"` (las
+  demás, `fmtUsd`/`fmtNum`, ya seguían la norma `"-"` para un cero
+  real). Cambiado para que devuelva `"-"`, mismo criterio en toda la
+  tabla (columnas %vs LY/%vs BUD sin LY/Budget disponible).
+- **Países sin actividad, ocultos:** *"todas las lineas que esten en
+  cero, no tiene sentido exponerlas"* -- el desglose país por país
+  (Caribbean/Latin America/Europe/Asia) mostraba TODOS los países
+  mapeados en `pais_zona_mapa`, la mayoría en cero. `ventas_mercado()`
+  ahora omite un país solo si no tuvo actividad NI en el período NI en
+  LY (0 y 0 a la vez); si tuvo venta en cualquiera de los dos períodos
+  queda (una caída real a 0 sigue siendo un dato). El total de zona
+  sigue sumando TODOS los países reales, se vean o no sus filas
+  individuales -- verificado que no cambia (Total Export sigue en
+  225.4K).
+
 ## Budget: pantalla editable real (agregado 2026-11-03)
 
 Pedido explícito de Ezequiel: *"La hoja Budget no esta mostrando la tabla
