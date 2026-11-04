@@ -963,6 +963,67 @@ def _agregado_mercado(desde: date, hasta_incl: date) -> dict[str, list[float]]:
     return acc
 
 
+LFY_MERCADO_RUTA = Path(__file__).parent / "lfy_mercado_jul_ago_2025.json"
+_lfy_mercado_cache: dict[tuple[str, str], list[float]] | None = None
+
+
+def _lfy_mercado_agregado() -> dict[tuple[str, str], list[float]]:
+    """jul-ago 2025 a nivel de ZONA (no hay desglose por país en esta
+    fixture), extraído de `YTD - Snap - ly.xlsx` (hoja "Sales by Market",
+    SNAP real que mandó Ariel con corte agosto-2025): columna Monthly =
+    agosto solo, columna YTD = julio+agosto acumulado (el ejercicio fiscal
+    arranca en julio) -- julio solo = YTD - Monthly. Costo derivado del
+    GM% de cada columna (`costo = usd * (1 - gm%)`), la hoja no trae costo
+    en USD directo. Verificado: la suma de las 11 zonas (jul+ago)
+    reproduce exacto el "Total Branded Wine" YTD de la hoja (USD
+    1.577.524,07). Pedido de Ezequiel 2026-11-04: *"en ventas por region,
+    no esta calculando el ytd ly"* -- el YTD (ejercicio fiscal desde
+    julio) quedaba con LY en blanco porque `DESDE_HISTORICO` (set-2025) es
+    posterior al inicio del ejercicio; mismo hueco que ya tapaba
+    `lfy_jul_ago_2025.json` para Sales by Line of Business, pero a nivel
+    de línea de negocio, no de zona/mercado."""
+    global _lfy_mercado_cache
+    if _lfy_mercado_cache is None:
+        raw = json.loads(LFY_MERCADO_RUTA.read_text(encoding="utf-8"))
+        _lfy_mercado_cache = {}
+        for k, v in raw.items():
+            periodo, zona = k.split("|", 1)
+            _lfy_mercado_cache[(periodo, zona)] = v
+    return _lfy_mercado_cache
+
+
+def _agregado_mercado_con_lfy(desde: date, hasta_incl: date) -> dict[str, list[float]]:
+    """Igual que `_agregado_mercado`, pero completa con la fixture LFY de
+    mercado (ver arriba) los meses del rango anteriores a `DESDE_HISTORICO`
+    -- mismo patrón que `_agregado_sbl_con_lfy()`. Asume meses calendario
+    completos (único patrón que usa `ventas_mercado` para LY: mismo rango
+    de hoy corrido 1 año atrás)."""
+    acc: dict[str, list[float]] = {}
+    lfy = None
+    for anio, mes in _meses_en_rango(desde, hasta_incl):
+        mes_ini = date(anio, mes, 1)
+        mes_fin_excl = date(anio + 1, 1, 1) if mes == 12 else date(anio, mes + 1, 1)
+        mes_fin = mes_fin_excl - timedelta(days=1)
+        d0, d1 = max(mes_ini, desde), min(mes_fin, hasta_incl)
+        if mes_ini < DESDE_HISTORICO:
+            if lfy is None:
+                lfy = _lfy_mercado_agregado()
+            periodo = f"{anio:04d}-{mes:02d}"
+            for (p, zona), v in lfy.items():
+                if p != periodo:
+                    continue
+                a = acc.setdefault(zona, [0.0, 0.0, 0.0])
+                for i in range(3):
+                    a[i] += v[i]
+        else:
+            sub = _agregado_mercado(d0, d1)
+            for zona, v in sub.items():
+                a = acc.setdefault(zona, [0.0, 0.0, 0.0])
+                for i in range(3):
+                    a[i] += v[i]
+    return acc
+
+
 def _agregado_mercado_budget(desde: date, hasta_incl: date) -> dict[str, list[float]] | None:
     """Suma Budget por zona para [desde, hasta_incl] -- `None` si falta la
     fixture de ALGUNO de los meses del rango (mismo criterio que
@@ -994,18 +1055,25 @@ def _fila_zona(display_label: str, zona_key: str, agg: dict[str, list[float]],
 
 def ventas_mercado(desde: date, hasta_incl: date) -> list[dict | None]:
     """Filas de Sales by Market (Ventas por Región encolumnada) para
-    [desde, hasta_incl]. LY = mismo rango corrido 1 año atrás -- NO hay
-    fixture LFY a nivel de mercado (la fixture jul-ago 2025 solo tiene
-    línea de negocio, ver `_lfy_agregado`), así que LY queda `None`
-    ("n/d") para cualquier parte del rango anterior a `DESDE_HISTORICO`,
-    mismo criterio ya usado para FdelMotte (sin fixture equivalente)."""
+    [desde, hasta_incl]. LY = mismo rango corrido 1 año atrás, usando la
+    fixture `lfy_mercado_jul_ago_2025.json` (ver `_lfy_mercado_agregado`)
+    para tapar el hueco jul-ago 2025 -- mismo criterio que ya usa SBL con
+    `lfy_jul_ago_2025.json`, agregado 2026-11-04 porque el YTD (ejercicio
+    fiscal arranca en julio) quedaba sin LY: `DESDE_HISTORICO` (set-2025)
+    es posterior al inicio del ejercicio, por eso acá el corte es
+    `LFY_DESDE` (jul-2025), no `DESDE_HISTORICO`. El desglose por PAÍS
+    (`agg_pais`/`ly_pais`) NO tiene fixture a esa granularidad -- sigue
+    con el corte viejo (`DESDE_HISTORICO`), así que los países bajo cada
+    zona quedan sin LY para jul-ago 2025 aunque el total de zona sí lo
+    tenga (mismo criterio: no inventar un desglose que no existe)."""
     agg = _agregado_mercado(desde, hasta_incl)
     agg_pais = _agregado_mercado_por_pais(desde, hasta_incl)
     desde_ly = date(desde.year - 1, desde.month, desde.day)
     hasta_ly = date(hasta_incl.year - 1, hasta_incl.month, hasta_incl.day)
-    con_ly = desde_ly >= DESDE_HISTORICO
-    ly = _agregado_mercado(desde_ly, hasta_ly) if con_ly else None
-    ly_pais = _agregado_mercado_por_pais(desde_ly, hasta_ly) if con_ly else None
+    con_ly = desde_ly >= LFY_DESDE
+    con_ly_pais = desde_ly >= DESDE_HISTORICO
+    ly = _agregado_mercado_con_lfy(desde_ly, hasta_ly) if con_ly else None
+    ly_pais = _agregado_mercado_por_pais(desde_ly, hasta_ly) if con_ly_pais else None
     bud = _agregado_mercado_budget(desde, hasta_incl)
 
     domestic_rows = [_fila_zona(label, zona, agg, ly, bud) for label, zona in ZONA_DOMESTIC]
